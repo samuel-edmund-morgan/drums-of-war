@@ -1,0 +1,88 @@
+# ============================================================================
+# CMaNGOS TBC — Docker Compose (Production)
+# ============================================================================
+# Deploy: /opt/cmangos-tbc/docker-compose.yml
+#
+# Services:
+#   cmangos-tbc-db      — MariaDB database (persistent volume)
+#   cmangos-tbc-server  — mangosd + realmd (game server)
+#
+# Usage:
+#   docker compose up -d          # Start
+#   docker compose down           # Stop
+#   docker compose logs -f        # Follow logs
+#
+# Ports:
+#   3725  — Realm/Login server (realmd)
+#   8086  — World server (mangosd)
+#   3307  — MariaDB (optional, for external access)
+# ============================================================================
+
+services:
+  # ==========================================================================
+  # MariaDB Database
+  # ==========================================================================
+  cmangos-tbc-db:
+    image: mariadb:lts
+    container_name: cmangos-tbc-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:-mangos_root_password}"
+    volumes:
+      - cmangos-tbc-db-data:/var/lib/mysql
+    ports:
+      - "${DB_EXTERNAL_PORT:-3307}:3306"
+    networks:
+      - cmangos-tbc-net
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    stop_grace_period: 30s
+
+  # ==========================================================================
+  # CMaNGOS TBC Server (mangosd + realmd)
+  # ==========================================================================
+  cmangos-tbc-server:
+    image: semorgana/cmangos-tbc:latest
+    container_name: cmangos-tbc-server
+    restart: unless-stopped
+    depends_on:
+      cmangos-tbc-db:
+        condition: service_healthy
+    environment:
+      DB_HOST: "cmangos-tbc-db"
+      DB_PORT: "3306"
+      DB_USER: "mangos"
+      DB_PASS: "mangos"
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD:-mangos_root_password}"
+      SERVER_PUBLIC_IP: "${SERVER_PUBLIC_IP:-127.0.0.1}"
+      Mangosd_LoginDatabaseInfo: "cmangos-tbc-db;3306;mangos;mangos;tbcrealmd"
+      Mangosd_WorldDatabaseInfo: "cmangos-tbc-db;3306;mangos;mangos;tbcmangos"
+      Mangosd_CharacterDatabaseInfo: "cmangos-tbc-db;3306;mangos;mangos;tbccharacters"
+      Mangosd_LogsDatabaseInfo: "cmangos-tbc-db;3306;mangos;mangos;tbclogs"
+      Mangosd_DataDir: "/opt/cmangos/data"
+      Mangosd_LogsDir: "/opt/cmangos/logs"
+      Mangosd_Console_Enable: "0"
+      Mangosd_WorldServerPort: "8085"
+      Realmd_LoginDatabaseInfo: "cmangos-tbc-db;3306;mangos;mangos;tbcrealmd"
+    volumes:
+      - ./data:/opt/cmangos/data:ro
+      - ./etc:/opt/cmangos/etc
+      - ./logs:/opt/cmangos/logs
+    ports:
+      - "8086:8085"
+      - "3725:3724"
+    networks:
+      - cmangos-tbc-net
+    stop_grace_period: 30s
+
+volumes:
+  cmangos-tbc-db-data:
+    name: cmangos-tbc-db-data
+
+networks:
+  cmangos-tbc-net:
+    name: cmangos-tbc-net

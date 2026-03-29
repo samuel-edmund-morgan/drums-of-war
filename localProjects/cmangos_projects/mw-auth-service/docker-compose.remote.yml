@@ -1,0 +1,60 @@
+services:
+  mw-auth-service:
+    image: ${MW_AUTH_IMAGE:-semorgana/mw-auth-service:latest}
+    container_name: mw-auth-service
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      CLASSIC_DB_HOST: vmangos-db
+      CLASSIC_DB_NAME: realmd
+      TBC_DB_HOST: cmangos-tbc-db
+      TBC_DB_NAME: tbcrealmd
+      WOTLK_DB_HOST: azerothcore-db
+      WOTLK_DB_NAME: acore_auth
+      DB_USER: root
+      DB_PASSWORD: ${MW_DB_PASSWORD}
+      JWT_SECRET: ${MW_JWT_SECRET}
+      COOKIE_DOMAIN: ${MW_DOMAIN:-world-of-warcraft.morgan-dev.com}
+      COOKIE_SECURE: "1"
+      CORS_ORIGIN: "https://${MW_DOMAIN:-world-of-warcraft.morgan-dev.com}"
+      APP_DEBUG: "0"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik"
+      - "traefik.http.routers.mw-auth.rule=Host(`${MW_DOMAIN}`) && PathPrefix(`/auth/`)"
+      - "traefik.http.routers.mw-auth.entrypoints=websecure"
+      - "traefik.http.routers.mw-auth.priority=150"
+      - "traefik.http.routers.mw-auth.tls=true"
+      - "traefik.http.routers.mw-auth.tls.certresolver=${MW_TRAEFIK_CERTRESOLVER:-letsencrypt_dns}"
+      - "traefik.http.routers.mw-auth.middlewares=mw-auth-strip@docker,mw-auth-headers@docker"
+      - "traefik.http.services.mw-auth.loadbalancer.server.port=8080"
+      - "traefik.http.middlewares.mw-auth-strip.stripprefix.prefixes=/auth"
+      - "traefik.http.middlewares.mw-auth-headers.headers.contentTypeNosniff=true"
+      - "traefik.http.middlewares.mw-auth-headers.headers.frameDeny=true"
+      - "traefik.http.middlewares.mw-auth-headers.headers.referrerPolicy=same-origin"
+      - "traefik.http.middlewares.mw-auth-headers.headers.browserXssFilter=true"
+    networks:
+      - traefik
+      - classic_db
+      - tbc_db
+      - wotlk_db
+
+networks:
+  traefik:
+    external: true
+  classic_db:
+    external: true
+    name: cmangos-net
+  tbc_db:
+    external: true
+    name: cmangos-tbc-net
+  wotlk_db:
+    external: true
+    name: ${MW_WOTLK_DB_NETWORK:-azerothcore-net}

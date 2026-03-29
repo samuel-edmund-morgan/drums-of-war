@@ -1,0 +1,173 @@
+[
+  {
+    "id": 21,
+    "title": "Admin Panel: Server logs, Docker management & config tools",
+    "author": "Drums of War Team",
+    "date": "2026-03-29T01:00:00Z",
+    "preview": "Admin panel now has live server log viewer, full Docker container management (start/stop/restart/update), and real-time server status checks.",
+    "patch": "general",
+    "tag": "infrastructure"
+  },
+  {
+    "id": 20,
+    "title": "Account registration with email verification",
+    "author": "Drums of War Team",
+    "date": "2026-03-29T00:30:00Z",
+    "preview": "New players can now register directly on the website. One registration creates accounts on all three servers (Classic, TBC, WotLK) after email verification.",
+    "patch": "general",
+    "tag": "feature"
+  },
+  {
+    "id": 19,
+    "title": "Armory search now case-insensitive",
+    "author": "Drums of War Team",
+    "date": "2026-03-29T00:15:00Z",
+    "preview": "Character search in the Armory now works regardless of letter case across all servers, including WotLK.",
+    "patch": "general",
+    "tag": "bugfix"
+  },
+  {
+    "id": 18,
+    "title": "Guide page updated with download links",
+    "author": "Drums of War Team",
+    "date": "2026-03-29T00:00:00Z",
+    "preview": "The How To Play guide now includes direct download links for all three game clients and uses the domain name for realmlist instead of IP address.",
+    "patch": "general",
+    "tag": "improvement"
+  },
+  {
+    "id": 17,
+    "title": "Talent trees: real spell values and rank-aware tooltips",
+    "author": "Drums of War Team",
+    "date": "2026-03-28T22:00:00Z",
+    "preview": "Talent tooltips now show actual spell values instead of format codes, and display the description for your learned rank — not just rank 1.",
+    "patch": "general",
+    "tag": "improvement"
+  },
+  {
+    "id": 16,
+    "title": "Armory: Talent Tree viewer added",
+    "author": "Drums of War Team",
+    "date": "2026-03-28T18:00:00Z",
+    "preview": "Character armory now shows the full talent tree for all three expansions. Browse a character's spent talents across all trees with visual icons, rank counters, and hover tooltips.",
+    "patch": "general",
+    "tag": "feature"
+  },
+  {
+    "id": 15,
+    "title": "Honor, Online, Statistics & Auction House launched",
+    "author": "Drums of War Team",
+    "date": "2026-03-28T14:00:00Z",
+    "preview": "Four new community pages are live: Honor Leaderboard with faction tabs, Players Online with auto-refresh, server Statistics with race/class/level charts, and a live Auction House browser with search and filtering.",
+    "patch": "general",
+    "tag": "feature"
+  },
+  {
+    "id": 14,
+    "title": "Server Management controls added to Admin panel",
+    "author": "Drums of War Team",
+    "date": "2026-03-28T10:00:00Z",
+    "preview": "Admins can now stop, restart, or trigger a full update-and-deploy pipeline for each game server directly from the admin panel, with real-time progress logs.",
+    "patch": "general",
+    "tag": "infrastructure"
+  },
+  {
+    "id": 13,
+    "title": "GM Admin Panel",
+    "author": "Drums of War Team",
+    "date": "2026-03-27T18:00:00Z",
+    "preview": "Server administrators now have a dedicated admin panel with real-time server monitoring, account management, uptime tracking, and announcement system.",
+    "patch": "general",
+    "tag": "feature"
+  },
+  {
+    "id": 12,
+    "title": "How To Play guide added",
+    "author": "Drums of War Team",
+    "date": "2026-03-27T16:00:00Z",
+    "preview": "New connection guide with realmlist setup, client download links, and troubleshooting FAQ — everything you need to get started.",
+    "patch": "general",
+    "tag": "feature"
+  },
+  {
+    "id": 11,
+    "title": "Character Transfer system live",
+    "author": "Drums of War Team",
+    "date": "2026-03-27T15:00:00Z",
+    "preview": "Transfer your characters between expansions directly from the website. Classic → TBC → WotLK progression path is now available for logged-in users.",
+    "patch": "general",
+    "tag": "feature"
+  },
+  {
+    "id": 10,
+    "title": "Account Management page",
+    "author": "Drums of War Team",
+    "date": "2026-03-27T14:00:00Z",
+    "preview": "View your characters across all servers, change password, and manage your linked accounts from one place.",
+    "patch": "general",
+    "tag": "feature"
+  },
+  {
+    "id": 9,
+    "title": "Unified login system",
+    "author": "Drums of War Team",
+    "date": "2026-03-27T12:00:00Z",
+    "preview": "One account now works across all three servers. Login once on the website to access Classic, TBC, and WotLK. Registration creates accounts on all realms simultaneously.",
+    "patch": "general",
+    "tag": "feature"
+  },
+  {
+    "id": 8,
+    "title": "Armory: item icons and tooltips",
+    "author": "Drums of War Team",
+    "date": "2026-03-26T18:00:00Z",
+    "preview": "Character armory now shows real item icons with quality-colored borders and detailed stat tooltips on hover. Icons are cached locally for fast loading.",
+    "patch": "general",
+    "tag": "improvement"
+  },
+  {
+    "id": 7,
+    "title": "New unified website launched",
+    "author": "Drums of War Team",
+    "date": "2026-03-25T10:00:00Z",
+    "preview": "Welcome to the new Drums of War website! Modern dark theme, server status dashboard, character armory, and cross-expansion account system — all in one place.",
+    "patch": "general",
+    "tag": "announcement"
+  },
+  {
+    "id": 6,
+    "title": "Wrath of the Lich King server migrated to AzerothCore",
+    "author": "Drums of War Team",
+    "date": "2026-03-20T12:00:00Z",
+    "preview": "WotLK server has been migrated from CMaNGOS to AzerothCore for better stability, more content, and active development. All characters have been preserved.",
+    "patch": "wotlk",
+    "tag": "infrastructure"
+  },
+  {
+    "id": 5,
+    "title": "Classic server upgraded to VMaNGOS",
+    "author": "Drums of War Team",
+    "date": "2026-03-18T12:00:00Z",
+    "preview": "Classic realm now runs on VMaNGOS — a more accurate vanilla emulator with better scripting, pathfinding, and authentic 1.12.1 experience.",
+    "patch": "classic",
+    "tag": "infrastructure"
+  },
+  {
+    "id": 4,
+    "title": "Character transfer pipeline verified",
+    "author": "Drums of War Team",
+    "date": "2026-03-14T12:00:00Z",
+    "preview": "End-to-end character transfer from Classic through TBC to WotLK has been tested and verified. Characters, items, skills, and reputations transfer correctly.",
+    "patch": "general",
+    "tag": "feature"
+  },
+  {
+    "id": 3,
+    "title": "All three servers online",
+    "author": "Drums of War Team",
+    "date": "2026-03-10T12:00:00Z",
+    "preview": "Classic (1.12.1), The Burning Crusade (2.4.3), and Wrath of the Lich King (3.3.5a) are all running and accepting connections. One realmlist for all three!",
+    "patch": "general",
+    "tag": "announcement"
+  }
+]

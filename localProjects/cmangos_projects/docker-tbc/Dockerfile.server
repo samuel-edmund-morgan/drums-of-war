@@ -1,0 +1,141 @@
+# ============================================================================
+# CMaNGOS TBC — Server Dockerfile (Multi-Stage)
+# ============================================================================
+# Builds mangosd + realmd from source, includes tbc-db for DB init.
+# Final image is slim runtime with only required libraries.
+#
+# Build:
+#   docker build -t semorgana/cmangos-tbc:latest -f Dockerfile.server .
+#
+# The image includes:
+#   - /opt/cmangos/bin/mangosd    (world server)
+#   - /opt/cmangos/bin/realmd     (login server)
+#   - /opt/cmangos/etc/*.conf.dist (config templates)
+#   - /opt/cmangos/sql/           (SQL base schemas + updates)
+#   - /opt/cmangos/tbc-db/        (world database content)
+#   - /opt/cmangos/scripts/       (entrypoint + db-init)
+# ============================================================================
+
+# ============================================================================
+# Stage 1: Build server binaries
+# ============================================================================
+FROM ubuntu:22.04 AS builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential gcc g++ cmake git \
+    libmysqlclient-dev libssl-dev \
+    libboost-system-dev libboost-program-options-dev \
+    libboost-thread-dev libboost-regex-dev \
+    libboost-serialization-dev libboost-filesystem-dev \
+    zlib1g-dev libbz2-dev \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Clone mangos-tbc (latest master)
+ARG MANGOS_REPO=https://github.com/cmangos/mangos-tbc.git
+ARG MANGOS_BRANCH=master
+RUN git clone --depth 1 -b ${MANGOS_BRANCH} ${MANGOS_REPO} /src
+
+WORKDIR /build
+
+# Build game server + login server (no extractors)
+RUN cmake /src \
+    -DCMAKE_INSTALL_PREFIX=/opt/cmangos \
+    -DBUILD_GAME_SERVER=ON \
+    -DBUILD_LOGIN_SERVER=ON \
+    -DBUILD_EXTRACTORS=OFF \
+    -DBUILD_PLAYERBOTS=ON \
+    -DBUILD_AHBOT=ON \
+    -DPCH=1 \
+    -DDEBUG=0 \
+    && make -j2 \
+    && make install
+
+# Save the SQL files from source
+RUN cp -r /src/sql /opt/cmangos/sql
+
+# Save commit hash for version tracking
+RUN cd /src && git rev-parse HEAD > /opt/cmangos/COMMIT_HASH
+
+# ============================================================================
+# Stage 2: Clone tbc-db for world database content
+# ============================================================================
+FROM ubuntu:22.04 AS db-prep
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+ARG TBCDB_REPO=https://github.com/cmangos/tbc-db.git
+RUN git clone --depth 1 ${TBCDB_REPO} /tbc-db
+
+# Save commit hash
+RUN cd /tbc-db && git rev-parse HEAD > /tbc-db/COMMIT_HASH
+
+# ============================================================================
+# Stage 3: Runtime image (slim)
+# ============================================================================
+FROM ubuntu:22.04 AS runtime
+
+LABEL maintainer="semorgana"
+LABEL description="CMaNGOS TBC WoW Server"
+LABEL org.opencontainers.image.source="https://github.com/cmangos/mangos-tbc"
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install only runtime dependencies (no compilers)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libmysqlclient21 \
+    libssl3 \
+    libboost-system1.74.0 \
+    libboost-program-options1.74.0 \
+    libboost-thread1.74.0 \
+    libboost-regex1.74.0 \
+    libboost-serialization1.74.0 \
+    libboost-filesystem1.74.0 \
+    mysql-client \
+    bash \
+    ca-certificates \
+    gosu \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create mangos user (non-root)
+RUN groupadd -r mangos && useradd -r -g mangos -d /opt/cmangos -s /bin/bash mangos
+
+# Copy binaries from builder
+COPY --from=builder /opt/cmangos/bin/ /opt/cmangos/bin/
+COPY --from=builder /opt/cmangos/etc/ /opt/cmangos/etc/
+COPY --from=builder /opt/cmangos/sql/ /opt/cmangos/sql/
+COPY --from=builder /opt/cmangos/COMMIT_HASH /opt/cmangos/COMMIT_HASH
+
+# Save default configs to a backup location (volume mounts may override /opt/cmangos/etc/)
+RUN cp -r /opt/cmangos/etc /opt/cmangos/etc.dist
+
+# Copy tbc-db for world database population
+COPY --from=db-prep /tbc-db/ /opt/cmangos/tbc-db/
+
+# Copy scripts
+COPY scripts/entrypoint.sh /opt/cmangos/scripts/entrypoint.sh
+COPY scripts/db-init.sh /opt/cmangos/scripts/db-init.sh
+RUN chmod +x /opt/cmangos/scripts/*.sh
+
+# Create required directories
+RUN mkdir -p /opt/cmangos/data /opt/cmangos/logs \
+    && chown -R mangos:mangos /opt/cmangos
+
+# Expose ports
+# 8085 = World Server (mangosd)  — mapped to 8086 externally
+# 3724 = Login/Realm Server (realmd) — mapped to 3725 externally
+EXPOSE 8085 3724
+
+WORKDIR /opt/cmangos
+
+# Health check: verify mangosd process is running
+HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=3 \
+    CMD pgrep mangosd > /dev/null || exit 1
+
+ENTRYPOINT ["/opt/cmangos/scripts/entrypoint.sh"]

@@ -1,0 +1,50 @@
+# ── Environment & Secrets ──
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+workflow_config.md
+remote_access.md
+
+# ── Upstream repos (cloned by setup.sh) ──
+localProjects/cmangos_projects/azerothcore-wotlk/
+localProjects/cmangos_projects/mangos-classic/
+localProjects/cmangos_projects/issues.wiki/
+localProjects/cmangos_projects/spp-classics-cmangos/
+
+# ── Legacy / replaced ──
+localProjects/cmangos_projects/mangos-website/
+localProjects/cmangos_projects/docker-website/
+
+# ── Data files (maps, DBC, backups) ──
+*.sql
+*.dbc
+data/classic/
+data/tbc/
+data/wotlk/
+additionalContextFiles/
+
+# ── Build artifacts ──
+node_modules/
+.next/
+dist/
+build/
+icon-cache/
+
+# ── Python ──
+__pycache__/
+*.pyc
+
+# ── OS ──
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# ── Docker ──
+*.log
+
+# ── Claude memory (personal) ──
+.claude/

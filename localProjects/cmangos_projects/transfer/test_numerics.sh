@@ -1,0 +1,18 @@
+#!/bin/bash
+DB="${DB_PASSWORD}"
+DOCKER="docker exec cmangos-wotlk-db mariadb -u root -p$DB wotlkcharacters -e"
+
+echo "=== Step 1: Clone ALL from Testlock ==="
+$DOCKER "UPDATE characters dst JOIN characters src ON src.guid=1802 SET dst.race=src.race,dst.class=src.class,dst.gender=src.gender,dst.level=src.level,dst.xp=src.xp,dst.money=src.money,dst.skin=src.skin,dst.face=src.face,dst.hairstyle=src.hairstyle,dst.haircolor=src.haircolor,dst.facialhair=src.facialhair,dst.bankSlots=src.bankSlots,dst.restState=src.restState,dst.playerFlags=src.playerFlags,dst.playerBytes=src.playerBytes,dst.playerBytes2=src.playerBytes2,dst.position_x=src.position_x,dst.position_y=src.position_y,dst.position_z=src.position_z,dst.map=src.map,dst.orientation=src.orientation,dst.taximask=src.taximask,dst.online=src.online,dst.cinematic=src.cinematic,dst.totaltime=src.totaltime,dst.leveltime=src.leveltime,dst.logout_time=src.logout_time,dst.is_logout_resting=src.is_logout_resting,dst.rest_bonus=src.rest_bonus,dst.resettalents_cost=src.resettalents_cost,dst.resettalents_time=src.resettalents_time,dst.trans_x=src.trans_x,dst.trans_y=src.trans_y,dst.trans_z=src.trans_z,dst.trans_o=src.trans_o,dst.transguid=src.transguid,dst.extra_flags=src.extra_flags,dst.stable_slots=src.stable_slots,dst.at_login=src.at_login,dst.zone=src.zone,dst.death_expire_time=src.death_expire_time,dst.taxi_path=src.taxi_path,dst.arenaPoints=src.arenaPoints,dst.totalHonorPoints=src.totalHonorPoints,dst.todayHonorPoints=src.todayHonorPoints,dst.yesterdayHonorPoints=src.yesterdayHonorPoints,dst.totalKills=src.totalKills,dst.todayKills=src.todayKills,dst.yesterdayKills=src.yesterdayKills,dst.chosenTitle=src.chosenTitle,dst.knownCurrencies=src.knownCurrencies,dst.watchedFaction=src.watchedFaction,dst.drunk=src.drunk,dst.health=src.health,dst.power1=src.power1,dst.power2=src.power2,dst.power3=src.power3,dst.power4=src.power4,dst.power5=src.power5,dst.exploredZones=src.exploredZones,dst.equipmentCache=src.equipmentCache,dst.ammoId=src.ammoId,dst.knownTitles=src.knownTitles,dst.actionBars=src.actionBars,dst.fishingSteps=src.fishingSteps WHERE dst.guid=1801" 2>/dev/null
+echo "Clone done"
+
+echo "=== Step 2: Clean secondary ==="
+$DOCKER "DELETE FROM character_spell WHERE guid=1801;DELETE FROM character_skills WHERE guid=1801;DELETE FROM character_reputation WHERE guid=1801;DELETE FROM character_action WHERE guid=1801;DELETE FROM character_aura WHERE guid=1801;DELETE FROM character_stats WHERE guid=1801;DELETE FROM character_inventory WHERE guid=1801;DELETE FROM character_account_data WHERE guid=1801;DELETE FROM character_queststatus WHERE guid=1801;DELETE FROM character_social WHERE guid=1801;DELETE FROM character_spell_cooldown WHERE guid=1801;DELETE FROM item_instance WHERE owner_guid=1801;DELETE FROM character_pet WHERE owner=1801;DELETE FROM character_achievement WHERE guid=1801;DELETE FROM character_achievement_progress WHERE guid=1801;DELETE FROM character_talent WHERE guid=1801" 2>/dev/null
+echo "Secondary cleaned"
+
+echo "=== Step 3: Restore ONLY numerics (NO taximask, NO exploredZones, NO equipmentCache) ==="
+$DOCKER "UPDATE characters SET xp=31,money=37903267,totaltime=1202050,leveltime=146378,logout_time=1772560692,rest_bonus=0,resettalents_cost=100000,resettalents_time=1752771490,watchedFaction=42,health=7234,power1=7348,power2=0,power4=100,actionBars=15,fishingSteps=2,at_login=6,cinematic=1,playerFlags=2080,playerBytes2=33947654 WHERE guid=1801" 2>/dev/null
+echo "Numerics restored"
+
+echo "=== Verify ==="
+$DOCKER "SELECT guid,name,xp,money,playerFlags,playerBytes2,at_login,health FROM characters WHERE guid=1801" 2>/dev/null

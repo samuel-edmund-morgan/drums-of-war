@@ -1,0 +1,68 @@
+services:
+  mw-unified-site:
+    image: ${MW_SITE_IMAGE:-semorgana/mw-unified-site:latest}
+    container_name: mw-unified-site
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik"
+      - "traefik.http.routers.mw-unified-site.rule=Host(`${MW_DOMAIN}`) && !PathPrefix(`/classic`, `/tbc`, `/wotlk`, `/auth`)"
+      - "traefik.http.routers.mw-unified-site.entrypoints=websecure"
+      - "traefik.http.routers.mw-unified-site.priority=500"
+      - "traefik.http.routers.mw-unified-site.tls=true"
+      - "traefik.http.routers.mw-unified-site.tls.certresolver=${MW_TRAEFIK_CERTRESOLVER:-letsencrypt_dns}"
+      - "traefik.http.services.mw-unified-site.loadbalancer.server.port=3000"
+      # Static assets route
+      - "traefik.http.routers.mw-unified-site-assets.rule=Host(`${MW_DOMAIN}`) && PathPrefix(`/_next/`, `/art/`, `/api/`, `/favicon.ico`)"
+      - "traefik.http.routers.mw-unified-site-assets.entrypoints=websecure"
+      - "traefik.http.routers.mw-unified-site-assets.priority=400"
+      - "traefik.http.routers.mw-unified-site-assets.tls=true"
+      - "traefik.http.routers.mw-unified-site-assets.tls.certresolver=${MW_TRAEFIK_CERTRESOLVER:-letsencrypt_dns}"
+      - "traefik.http.routers.mw-unified-site-assets.service=mw-unified-site"
+    environment:
+      CLASSIC_DB_HOST: vmangos-db
+      CLASSIC_REALMD: realmd
+      CLASSIC_CHARDB: characters
+      TBC_DB_HOST: cmangos-tbc-db
+      TBC_REALMD: tbcrealmd
+      TBC_CHARDB: tbccharacters
+      WOTLK_DB_HOST: azerothcore-db
+      WOTLK_REALMD: acore_auth
+      WOTLK_CHARDB: acore_characters
+      CLASSIC_WORLDDB: mangos
+      TBC_WORLDDB: tbcmangos
+      WOTLK_WORLDDB: acore_world
+      DB_USER: root
+      DB_PASSWORD: ${MW_DB_PASSWORD}
+      MV_CACHE_DIR: /app/mv-cache
+    volumes:
+      - model-cache:/app/mv-cache
+    networks:
+      - traefik
+      - classic_db
+      - tbc_db
+      - wotlk_db
+
+volumes:
+  model-cache:
+
+networks:
+  traefik:
+    external: true
+  classic_db:
+    external: true
+    name: cmangos-net
+  tbc_db:
+    external: true
+    name: cmangos-tbc-net
+  wotlk_db:
+    external: true
+    name: ${MW_WOTLK_DB_NETWORK:-azerothcore-net}

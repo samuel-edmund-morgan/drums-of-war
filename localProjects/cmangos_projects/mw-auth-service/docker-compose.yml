@@ -1,0 +1,20 @@
+services:
+  mw-auth-service:
+    build: .
+    container_name: mw-auth-service
+    restart: unless-stopped
+    ports:
+      - "8090:80"
+    environment:
+      CLASSIC_DB_HOST: ${CLASSIC_DB_HOST:-vmangos-db}
+      CLASSIC_DB_NAME: ${CLASSIC_DB_NAME:-realmd}
+      TBC_DB_HOST: ${TBC_DB_HOST:-cmangos-tbc-db}
+      TBC_DB_NAME: ${TBC_DB_NAME:-tbcrealmd}
+      WOTLK_DB_HOST: ${WOTLK_DB_HOST:-azerothcore-db}
+      WOTLK_DB_NAME: ${WOTLK_DB_NAME:-acore_auth}
+      DB_USER: ${DB_USER:-root}
+      DB_PASSWORD: ${DB_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-minimum-32-characters-long!!}
+      COOKIE_SECURE: "0"
+      CORS_ORIGIN: "*"
+      APP_DEBUG: "1"

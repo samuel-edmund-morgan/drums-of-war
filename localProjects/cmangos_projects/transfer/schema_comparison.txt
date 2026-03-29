@@ -1,0 +1,505 @@
+=== SCHEMA COMPARISON: Classic vs TBC vs WotLK ===
+Generated: Tue Mar  3 21:22:22 EET 2026
+
+--- TABLE PRESENCE ---
+TABLE                                    CLASSIC    TBC        WOTLK     
+-----                                    -------    ---        -----     
+_bak_character_pet                       0          0          1          <-- DIFFERS
+_bak_pet_aura                            0          0          1          <-- DIFFERS
+_bak_pet_spell                           0          0          1          <-- DIFFERS
+account_data                             1          1          1         
+account_instances_entered                1          1          1         
+ahbot_items                              1          1          1         
+arena_team                               0          1          1          <-- DIFFERS
+arena_team_member                        0          1          1          <-- DIFFERS
+arena_team_stats                         0          1          1          <-- DIFFERS
+auction                                  1          1          1         
+bugreport                                1          1          1         
+calendar_events                          0          0          1          <-- DIFFERS
+calendar_invites                         0          0          1          <-- DIFFERS
+character_account_data                   1          1          1         
+character_achievement                    0          0          1          <-- DIFFERS
+character_achievement_progress           0          0          1          <-- DIFFERS
+character_action                         1          1          1         
+character_aura                           1          1          1         
+character_battleground_data              1          1          1         
+character_battleground_random            0          0          1          <-- DIFFERS
+character_db_version                     1          1          1         
+character_declinedname                   0          1          1          <-- DIFFERS
+character_equipmentsets                  0          0          1          <-- DIFFERS
+character_forgotten_skills               1          0          0          <-- DIFFERS
+character_gifts                          1          1          1         
+character_glyphs                         0          0          1          <-- DIFFERS
+character_homebind                       1          1          1         
+character_honor_cp                       1          0          0          <-- DIFFERS
+character_instance                       1          1          1         
+character_inventory                      1          1          1         
+character_pet                            1          1          1         
+character_pet_declinedname               0          1          1          <-- DIFFERS
+character_queststatus                    1          1          1         
+character_queststatus_daily              0          1          1          <-- DIFFERS
+character_queststatus_monthly            0          1          1          <-- DIFFERS
+character_queststatus_weekly             1          1          1         
+character_reputation                     1          1          1         
+character_skills                         1          1          1         
+character_social                         1          1          1         
+character_spell                          1          1          1         
+character_spell_cooldown                 1          1          1         
+character_stats                          1          1          1         
+character_sync_hash                      0          1          1          <-- DIFFERS
+character_talent                         0          0          1          <-- DIFFERS
+character_tutorial                       1          1          1         
+characters                               1          1          1         
+corpse                                   1          1          1         
+creature_respawn                         1          1          1         
+event_group_chosen                       0          1          1          <-- DIFFERS
+game_event_status                        1          1          1         
+gameobject_respawn                       1          1          1         
+gm_surveys                               1          1          1         
+gm_tickets                               1          1          1         
+group_instance                           1          1          1         
+group_member                             1          1          1         
+groups                                   1          1          1         
+guild                                    1          1          1         
+guild_bank_eventlog                      0          1          1          <-- DIFFERS
+guild_bank_item                          0          1          1          <-- DIFFERS
+guild_bank_right                         0          1          1          <-- DIFFERS
+guild_bank_tab                           0          1          1          <-- DIFFERS
+guild_eventlog                           1          1          1         
+guild_member                             1          1          1         
+guild_rank                               1          1          1         
+instance                                 1          1          1         
+instance_reset                           1          1          1         
+item_instance                            1          1          1         
+item_loot                                1          1          1         
+item_text                                1          1          0          <-- DIFFERS
+mail                                     1          1          1         
+mail_items                               1          1          1         
+pet_aura                                 1          1          1         
+pet_spell                                1          1          1         
+pet_spell_cooldown                       1          1          1         
+petition                                 1          1          1         
+petition_sign                            1          1          1         
+playerbot_quest_data                     0          0          1          <-- DIFFERS
+playerbot_saved_data                     1          1          1         
+playerbot_talentspec                     0          0          1          <-- DIFFERS
+pvpstats_battlegrounds                   1          1          1         
+pvpstats_players                         1          1          1         
+saved_variables                          1          1          1         
+world                                    1          1          1         
+world_state                              1          1          1         
+
+--- COLUMN-LEVEL COMPARISON FOR CHARACTER-RELATED TABLES ---
+
+====== TABLE: characters ======
+  COLUMN                         CLASSIC  TBC      WOTLK     CLASSIC_TYPE         TBC_TYPE             WOTLK_TYPE          
+  ------                         -------  ---      -----     ------------         --------             ----------          
+  account                        YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  actionBars                     YES      YES      YES       tinyint(3) unsigned  tinyint(3) unsigned  tinyint(3) unsigned 
+  activeSpec                     YES      YES      YES       ---                  ---                  tinyint(3) unsigned  <-- MISSING
+  ammoId                         YES      YES      YES       int(10) unsigned     int(10) unsigned     int(10) unsigned    
+  arenaPoints                    YES      YES      YES       ---                  int(10) unsigned     int(10) unsigned     <-- MISSING
+  at_login                       YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  chosenTitle                    YES      YES      YES       ---                  int(10) unsigned     int(10) unsigned     <-- MISSING
+  cinematic                      YES      YES      YES       tinyint(3) unsigned  tinyint(3) unsigned  tinyint(3) unsigned 
+  class                          YES      YES      YES       tinyint(3) unsigned  tinyint(3) unsigned  tinyint(3) unsigned 
+  death_expire_time              YES      YES      YES       bigint(20) unsigned  bigint(20) unsigned  bigint(20) unsigned 
+  deleteDate                     YES      YES      YES       bigint(20) unsigned  bigint(20) unsigned  bigint(20) unsigned 
+  deleteInfos_Account            YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  deleteInfos_Name               YES      YES      YES       varchar(12)          varchar(12)          varchar(12)         
+  drunk                          YES      YES      YES       smallint(5) unsigned smallint(5) unsigned tinyint(3) unsigned  <-- TYPE DIFF
+  dungeon_difficulty             YES      YES      YES       ---                  tinyint(1) unsigned  tinyint(1) unsigned  <-- MISSING
+  equipmentCache                 YES      YES      YES       longtext             longtext             longtext            
+  exploredZones                  YES      YES      YES       longtext             longtext             longtext            
+  extra_flags                    YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  fishingSteps                   YES      YES      YES       tinyint(3) unsigned  tinyint(3) unsigned  tinyint(3) unsigned 
+  gender                         YES      YES      YES       tinyint(3) unsigned  tinyint(3) unsigned  tinyint(3) unsigned 
+  grantableLevels                YES      YES      YES       int(10) unsigned     int(10) unsigned     int(10) unsigned    
+  guid                           YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  health                         YES      YES      YES       int(10) unsigned     int(10) unsigned     int(10) unsigned    
+  honor_highest_rank             YES      YES      YES       int(10) unsigned     ---                  ---                  <-- MISSING
+  honor_standing                 YES      YES      YES       int(10) unsigned     ---                  ---                  <-- MISSING
+  is_logout_resting              YES      YES      YES       tinyint(3) unsigned  tinyint(3) unsigned  tinyint(3) unsigned 
+  knownCurrencies                YES      YES      YES       ---                  ---                  bigint(20) unsigned  <-- MISSING
+  knownTitles                    YES      YES      YES       ---                  longtext             longtext             <-- MISSING
+  level                          YES      YES      YES       tinyint(3) unsigned  tinyint(3) unsigned  tinyint(3) unsigned 
+  leveltime                      YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  logout_time                    YES      YES      YES       bigint(20) unsigned  bigint(20) unsigned  bigint(20) unsigned 
+  map                            YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  money                          YES      YES      YES       int(10) unsigned     int(10) unsigned     int(10) unsigned    
+  name                           YES      YES      YES       varchar(12)          varchar(12)          varchar(12)         
+  online                         YES      YES      YES       tinyint(3) unsigned  tinyint(3) unsigned  tinyint(3) unsigned 
+  orientation                    YES      YES      YES       float                float                float               
+  playerBytes                    YES      YES      YES       int(10) unsigned     int(10) unsigned     int(10) unsigned    
+  playerBytes2                   YES      YES      YES       int(10) unsigned     int(10) unsigned     int(10) unsigned    
+  playerFlags                    YES      YES      YES       int(10) unsigned     int(10) unsigned     int(10) unsigned    
+  position_x                     YES      YES      YES       float                float                float               
+  position_y                     YES      YES      YES       float                float                float               
+  position_z                     YES      YES      YES       float                float                float               
+  power1                         YES      YES      YES       int(10) unsigned     int(10) unsigned     int(10) unsigned    
+  power2                         YES      YES      YES       int(10) unsigned     int(10) unsigned     int(10) unsigned    
+  power3                         YES      YES      YES       int(10) unsigned     int(10) unsigned     int(10) unsigned    
+  power4                         YES      YES      YES       int(10) unsigned     int(10) unsigned     int(10) unsigned    
+  power5                         YES      YES      YES       int(10) unsigned     int(10) unsigned     int(10) unsigned    
+  power6                         YES      YES      YES       ---                  ---                  int(10) unsigned     <-- MISSING
+  power7                         YES      YES      YES       ---                  ---                  int(10) unsigned     <-- MISSING
+  race                           YES      YES      YES       tinyint(3) unsigned  tinyint(3) unsigned  tinyint(3) unsigned 
+  resettalents_cost              YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  resettalents_time              YES      YES      YES       bigint(20) unsigned  bigint(20) unsigned  bigint(20) unsigned 
+  rest_bonus                     YES      YES      YES       float                float                float               
+  specCount                      YES      YES      YES       ---                  ---                  tinyint(3) unsigned  <-- MISSING
+  stable_slots                   YES      YES      YES       tinyint(3) unsigned  tinyint(1) unsigned  tinyint(1) unsigned  <-- TYPE DIFF
+  stored_dishonorable_kills      YES      YES      YES       int(11)              ---                  ---                  <-- MISSING
+  stored_honor_rating            YES      YES      YES       float                ---                  ---                  <-- MISSING
+  stored_honorable_kills         YES      YES      YES       int(11)              ---                  ---                  <-- MISSING
+  taxi_path                      YES      YES      YES       text                 text                 text                
+  taximask                       YES      YES      YES       longtext             longtext             longtext            
+  todayHonorPoints               YES      YES      YES       ---                  int(10) unsigned     int(10) unsigned     <-- MISSING
+  todayKills                     YES      YES      YES       ---                  smallint(5) unsigned smallint(5) unsigned <-- MISSING
+  totalHonorPoints               YES      YES      YES       ---                  int(10) unsigned     int(10) unsigned     <-- MISSING
+  totalKills                     YES      YES      YES       ---                  int(10) unsigned     int(10) unsigned     <-- MISSING
+  totaltime                      YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  trans_o                        YES      YES      YES       float                float                float               
+  trans_x                        YES      YES      YES       float                float                float               
+  trans_y                        YES      YES      YES       float                float                float               
+  trans_z                        YES      YES      YES       float                float                float               
+  transguid                      YES      YES      YES       bigint(20) unsigned  bigint(20) unsigned  bigint(20) unsigned 
+  watchedFaction                 YES      YES      YES       int(10) unsigned     int(10) unsigned     int(10) unsigned    
+  xp                             YES      YES      YES       int(10) unsigned     int(10) unsigned     int(10) unsigned    
+  yesterdayHonorPoints           YES      YES      YES       ---                  int(10) unsigned     int(10) unsigned     <-- MISSING
+  yesterdayKills                 YES      YES      YES       ---                  smallint(5) unsigned smallint(5) unsigned <-- MISSING
+  zone                           YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+
+====== TABLE: character_account_data ======
+  COLUMN                         CLASSIC  TBC      WOTLK     CLASSIC_TYPE         TBC_TYPE             WOTLK_TYPE          
+  ------                         -------  ---      -----     ------------         --------             ----------          
+  data                           YES      YES      YES       longblob             longblob             longblob            
+  guid                           YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  time                           YES      YES      YES       bigint(20) unsigned  bigint(11) unsigned  bigint(11) unsigned  <-- TYPE DIFF
+  type                           YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+
+====== TABLE: character_action ======
+  COLUMN                         CLASSIC  TBC      WOTLK     CLASSIC_TYPE         TBC_TYPE             WOTLK_TYPE          
+  ------                         -------  ---      -----     ------------         --------             ----------          
+  action                         YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  button                         YES      YES      YES       tinyint(3) unsigned  tinyint(3) unsigned  tinyint(3) unsigned 
+  guid                           YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  spec                           YES      YES      YES       ---                  ---                  tinyint(3) unsigned  <-- MISSING
+  type                           YES      YES      YES       tinyint(3) unsigned  tinyint(3) unsigned  tinyint(3) unsigned 
+
+====== TABLE: character_aura ======
+  COLUMN                         CLASSIC  TBC      WOTLK     CLASSIC_TYPE         TBC_TYPE             WOTLK_TYPE          
+  ------                         -------  ---      -----     ------------         --------             ----------          
+  basepoints0                    YES      YES      YES       int(11)              int(11)              int(11)             
+  basepoints1                    YES      YES      YES       int(11)              int(11)              int(11)             
+  basepoints2                    YES      YES      YES       int(11)              int(11)              int(11)             
+  caster_guid                    YES      YES      YES       bigint(20) unsigned  bigint(20) unsigned  bigint(20) unsigned 
+  effIndexMask                   YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  guid                           YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  item_guid                      YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  maxduration                    YES      YES      YES       int(11)              int(11)              int(11)             
+  periodictime0                  YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  periodictime1                  YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  periodictime2                  YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  remaincharges                  YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  remaintime                     YES      YES      YES       int(11)              int(11)              int(11)             
+  spell                          YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  stackcount                     YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+
+====== TABLE: character_homebind ======
+  COLUMN                         CLASSIC  TBC      WOTLK     CLASSIC_TYPE         TBC_TYPE             WOTLK_TYPE          
+  ------                         -------  ---      -----     ------------         --------             ----------          
+  guid                           YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  map                            YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  position_x                     YES      YES      YES       float                float                float               
+  position_y                     YES      YES      YES       float                float                float               
+  position_z                     YES      YES      YES       float                float                float               
+  zone                           YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+
+====== TABLE: character_inventory ======
+  COLUMN                         CLASSIC  TBC      WOTLK     CLASSIC_TYPE         TBC_TYPE             WOTLK_TYPE          
+  ------                         -------  ---      -----     ------------         --------             ----------          
+  bag                            YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  guid                           YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  item                           YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  item_template                  YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  slot                           YES      YES      YES       tinyint(3) unsigned  tinyint(3) unsigned  tinyint(3) unsigned 
+
+====== TABLE: character_pet ======
+  COLUMN                         CLASSIC  TBC      WOTLK     CLASSIC_TYPE         TBC_TYPE             WOTLK_TYPE          
+  ------                         -------  ---      -----     ------------         --------             ----------          
+  CreatedBySpell                 YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  PetType                        YES      YES      YES       tinyint(3) unsigned  tinyint(3) unsigned  tinyint(3) unsigned 
+  Reactstate                     YES      YES      YES       tinyint(3) unsigned  tinyint(1) unsigned  tinyint(1) unsigned  <-- TYPE DIFF
+  abdata                         YES      YES      YES       longtext             longtext             longtext            
+  curhappiness                   YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  curhealth                      YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  curmana                        YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  entry                          YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  exp                            YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  id                             YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  level                          YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  loyalty                        YES      YES      YES       int(10) unsigned     int(11) unsigned     ---                  <-- MISSING
+  loyaltypoints                  YES      YES      YES       int(11)              int(11)              ---                  <-- MISSING
+  modelid                        YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  name                           YES      YES      YES       varchar(100)         varchar(100)         varchar(100)        
+  owner                          YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  renamed                        YES      YES      YES       tinyint(3) unsigned  tinyint(1) unsigned  tinyint(1) unsigned  <-- TYPE DIFF
+  resettalents_cost              YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  resettalents_time              YES      YES      YES       bigint(20) unsigned  bigint(20) unsigned  bigint(20) unsigned 
+  savetime                       YES      YES      YES       bigint(20) unsigned  bigint(20) unsigned  bigint(20) unsigned 
+  slot                           YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  teachspelldata                 YES      YES      YES       longtext             longtext             ---                  <-- MISSING
+  trainpoint                     YES      YES      YES       int(11)              int(11)              ---                  <-- MISSING
+  xpForNextLoyalty               YES      YES      YES       int(10) unsigned     int(11) unsigned     ---                  <-- MISSING
+
+====== TABLE: character_queststatus ======
+  COLUMN                         CLASSIC  TBC      WOTLK     CLASSIC_TYPE         TBC_TYPE             WOTLK_TYPE          
+  ------                         -------  ---      -----     ------------         --------             ----------          
+  explored                       YES      YES      YES       tinyint(3) unsigned  tinyint(1) unsigned  tinyint(1) unsigned  <-- TYPE DIFF
+  guid                           YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  itemcount1                     YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  itemcount2                     YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  itemcount3                     YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  itemcount4                     YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  itemcount5                     YES      YES      YES       ---                  ---                  int(11) unsigned     <-- MISSING
+  itemcount6                     YES      YES      YES       ---                  ---                  int(11) unsigned     <-- MISSING
+  mobcount1                      YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  mobcount2                      YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  mobcount3                      YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  mobcount4                      YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  quest                          YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  rewarded                       YES      YES      YES       tinyint(3) unsigned  tinyint(1) unsigned  tinyint(1) unsigned  <-- TYPE DIFF
+  status                         YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  timer                          YES      YES      YES       bigint(20) unsigned  bigint(20) unsigned  bigint(20) unsigned 
+
+====== TABLE: character_reputation ======
+  COLUMN                         CLASSIC  TBC      WOTLK     CLASSIC_TYPE         TBC_TYPE             WOTLK_TYPE          
+  ------                         -------  ---      -----     ------------         --------             ----------          
+  faction                        YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  flags                          YES      YES      YES       int(11)              int(11)              int(11)             
+  guid                           YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  standing                       YES      YES      YES       int(11)              int(11)              int(11)             
+
+====== TABLE: character_skills ======
+  COLUMN                         CLASSIC  TBC      WOTLK     CLASSIC_TYPE         TBC_TYPE             WOTLK_TYPE          
+  ------                         -------  ---      -----     ------------         --------             ----------          
+  guid                           YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  max                            YES      YES      YES       mediumint(8) unsigned mediumint(9) unsigned mediumint(9) unsigned <-- TYPE DIFF
+  skill                          YES      YES      YES       mediumint(8) unsigned mediumint(9) unsigned mediumint(9) unsigned <-- TYPE DIFF
+  value                          YES      YES      YES       mediumint(8) unsigned mediumint(9) unsigned mediumint(9) unsigned <-- TYPE DIFF
+
+====== TABLE: character_social ======
+  COLUMN                         CLASSIC  TBC      WOTLK     CLASSIC_TYPE         TBC_TYPE             WOTLK_TYPE          
+  ------                         -------  ---      -----     ------------         --------             ----------          
+  flags                          YES      YES      YES       tinyint(3) unsigned  tinyint(1) unsigned  tinyint(1) unsigned  <-- TYPE DIFF
+  friend                         YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  guid                           YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  note                           YES      YES      YES       ---                  varchar(48)          varchar(48)          <-- MISSING
+
+====== TABLE: character_spell ======
+  COLUMN                         CLASSIC  TBC      WOTLK     CLASSIC_TYPE         TBC_TYPE             WOTLK_TYPE          
+  ------                         -------  ---      -----     ------------         --------             ----------          
+  active                         YES      YES      YES       tinyint(3) unsigned  tinyint(3) unsigned  tinyint(3) unsigned 
+  disabled                       YES      YES      YES       tinyint(3) unsigned  tinyint(3) unsigned  tinyint(3) unsigned 
+  guid                           YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  spell                          YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+
+====== TABLE: character_spell_cooldown ======
+  COLUMN                         CLASSIC  TBC      WOTLK     CLASSIC_TYPE         TBC_TYPE             WOTLK_TYPE          
+  ------                         -------  ---      -----     ------------         --------             ----------          
+  Category                       YES      YES      YES       int(11) unsigned     int(11) unsigned     int(11) unsigned    
+  CategoryExpireTime             YES      YES      YES       bigint(20) unsigned  bigint(20) unsigned  bigint(20) unsigned 
+  ItemId                         YES      YES      YES       int(11) unsigned     int(11) unsigned     int(11) unsigned    
+  SpellExpireTime                YES      YES      YES       bigint(20) unsigned  bigint(20) unsigned  bigint(20) unsigned 
+  SpellId                        YES      YES      YES       int(11) unsigned     int(11) unsigned     int(11) unsigned    
+  guid                           YES      YES      YES       int(11) unsigned     int(11) unsigned     int(11) unsigned    
+
+====== TABLE: character_stats ======
+  COLUMN                         CLASSIC  TBC      WOTLK     CLASSIC_TYPE         TBC_TYPE             WOTLK_TYPE          
+  ------                         -------  ---      -----     ------------         --------             ----------          
+  agility                        YES      YES      YES       int(10) unsigned     int(10) unsigned     int(10) unsigned    
+  armor                          YES      YES      YES       int(10) unsigned     int(10) unsigned     int(10) unsigned    
+  attackPower                    YES      YES      YES       int(10) unsigned     int(10) unsigned     int(10) unsigned    
+  blockPct                       YES      YES      YES       float unsigned       float unsigned       float unsigned      
+  critPct                        YES      YES      YES       float unsigned       float unsigned       float unsigned      
+  dodgePct                       YES      YES      YES       float unsigned       float unsigned       float unsigned      
+  guid                           YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  intellect                      YES      YES      YES       int(10) unsigned     int(10) unsigned     int(10) unsigned    
+  maxhealth                      YES      YES      YES       int(10) unsigned     int(10) unsigned     int(10) unsigned    
+  maxpower1                      YES      YES      YES       int(10) unsigned     int(10) unsigned     int(10) unsigned    
+  maxpower2                      YES      YES      YES       int(10) unsigned     int(10) unsigned     int(10) unsigned    
+  maxpower3                      YES      YES      YES       int(10) unsigned     int(10) unsigned     int(10) unsigned    
+  maxpower4                      YES      YES      YES       int(10) unsigned     int(10) unsigned     int(10) unsigned    
+  maxpower5                      YES      YES      YES       int(10) unsigned     int(10) unsigned     int(10) unsigned    
+  maxpower6                      YES      YES      YES       int(10) unsigned     int(10) unsigned     int(10) unsigned    
+  maxpower7                      YES      YES      YES       int(10) unsigned     int(10) unsigned     int(10) unsigned    
+  parryPct                       YES      YES      YES       float unsigned       float unsigned       float unsigned      
+  rangedAttackPower              YES      YES      YES       int(10) unsigned     int(10) unsigned     int(10) unsigned    
+  rangedCritPct                  YES      YES      YES       float unsigned       float unsigned       float unsigned      
+  resArcane                      YES      YES      YES       int(10) unsigned     int(10) unsigned     int(10) unsigned    
+  resFire                        YES      YES      YES       int(10) unsigned     int(10) unsigned     int(10) unsigned    
+  resFrost                       YES      YES      YES       int(10) unsigned     int(10) unsigned     int(10) unsigned    
+  resHoly                        YES      YES      YES       int(10) unsigned     int(10) unsigned     int(10) unsigned    
+  resNature                      YES      YES      YES       int(10) unsigned     int(10) unsigned     int(10) unsigned    
+  resShadow                      YES      YES      YES       int(10) unsigned     int(10) unsigned     int(10) unsigned    
+  spellCritPct                   YES      YES      YES       ---                  float unsigned       float unsigned       <-- MISSING
+  spellPower                     YES      YES      YES       ---                  int(10) unsigned     int(10) unsigned     <-- MISSING
+  spirit                         YES      YES      YES       int(10) unsigned     int(10) unsigned     int(10) unsigned    
+  stamina                        YES      YES      YES       int(10) unsigned     int(10) unsigned     int(10) unsigned    
+  strength                       YES      YES      YES       int(10) unsigned     int(10) unsigned     int(10) unsigned    
+
+====== TABLE: character_talent ======
+  COLUMN                         CLASSIC  TBC      WOTLK     CLASSIC_TYPE         TBC_TYPE             WOTLK_TYPE          
+  ------                         -------  ---      -----     ------------         --------             ----------          
+  current_rank                   YES      YES      YES       ---                  ---                  tinyint(3) unsigned  <-- MISSING
+  guid                           YES      YES      YES       ---                  ---                  int(11) unsigned     <-- MISSING
+  spec                           YES      YES      YES       ---                  ---                  tinyint(3) unsigned  <-- MISSING
+  talent_id                      YES      YES      YES       ---                  ---                  int(11) unsigned     <-- MISSING
+
+====== TABLE: character_glyphs ======
+  COLUMN                         CLASSIC  TBC      WOTLK     CLASSIC_TYPE         TBC_TYPE             WOTLK_TYPE          
+  ------                         -------  ---      -----     ------------         --------             ----------          
+  glyph                          YES      YES      YES       ---                  ---                  int(11) unsigned     <-- MISSING
+  guid                           YES      YES      YES       ---                  ---                  int(11) unsigned     <-- MISSING
+  slot                           YES      YES      YES       ---                  ---                  tinyint(3) unsigned  <-- MISSING
+  spec                           YES      YES      YES       ---                  ---                  tinyint(3) unsigned  <-- MISSING
+
+====== TABLE: character_achievement ======
+  COLUMN                         CLASSIC  TBC      WOTLK     CLASSIC_TYPE         TBC_TYPE             WOTLK_TYPE          
+  ------                         -------  ---      -----     ------------         --------             ----------          
+  achievement                    YES      YES      YES       ---                  ---                  int(11) unsigned     <-- MISSING
+  date                           YES      YES      YES       ---                  ---                  bigint(11) unsigned  <-- MISSING
+  guid                           YES      YES      YES       ---                  ---                  int(11) unsigned     <-- MISSING
+
+====== TABLE: character_achievement_progress ======
+  COLUMN                         CLASSIC  TBC      WOTLK     CLASSIC_TYPE         TBC_TYPE             WOTLK_TYPE          
+  ------                         -------  ---      -----     ------------         --------             ----------          
+  counter                        YES      YES      YES       ---                  ---                  int(11) unsigned     <-- MISSING
+  criteria                       YES      YES      YES       ---                  ---                  int(11) unsigned     <-- MISSING
+  date                           YES      YES      YES       ---                  ---                  bigint(11) unsigned  <-- MISSING
+  failed                         YES      YES      YES       ---                  ---                  tinyint(3) unsigned  <-- MISSING
+  guid                           YES      YES      YES       ---                  ---                  int(11) unsigned     <-- MISSING
+
+====== TABLE: character_battleground_data ======
+  COLUMN                         CLASSIC  TBC      WOTLK     CLASSIC_TYPE         TBC_TYPE             WOTLK_TYPE          
+  ------                         -------  ---      -----     ------------         --------             ----------          
+  guid                           YES      YES      YES       int(11) unsigned     int(11) unsigned     int(11) unsigned    
+  instance_id                    YES      YES      YES       int(11) unsigned     int(11) unsigned     int(11) unsigned    
+  join_map                       YES      YES      YES       int(11)              int(11)              int(11)             
+  join_o                         YES      YES      YES       float                float                float               
+  join_x                         YES      YES      YES       float                float                float               
+  join_y                         YES      YES      YES       float                float                float               
+  join_z                         YES      YES      YES       float                float                float               
+  mount_spell                    YES      YES      YES       ---                  ---                  int(11)              <-- MISSING
+  team                           YES      YES      YES       int(11) unsigned     int(11) unsigned     int(11) unsigned    
+
+====== TABLE: character_equipmentsets ======
+  COLUMN                         CLASSIC  TBC      WOTLK     CLASSIC_TYPE         TBC_TYPE             WOTLK_TYPE          
+  ------                         -------  ---      -----     ------------         --------             ----------          
+  guid                           YES      YES      YES       ---                  ---                  int(11)              <-- MISSING
+  iconname                       YES      YES      YES       ---                  ---                  varchar(256)         <-- MISSING
+  ignore_mask                    YES      YES      YES       ---                  ---                  int(11) unsigned     <-- MISSING
+  item0                          YES      YES      YES       ---                  ---                  int(11) unsigned     <-- MISSING
+  item1                          YES      YES      YES       ---                  ---                  int(11) unsigned     <-- MISSING
+  item10                         YES      YES      YES       ---                  ---                  int(11) unsigned     <-- MISSING
+  item11                         YES      YES      YES       ---                  ---                  int(11) unsigned     <-- MISSING
+  item12                         YES      YES      YES       ---                  ---                  int(11) unsigned     <-- MISSING
+  item13                         YES      YES      YES       ---                  ---                  int(11) unsigned     <-- MISSING
+  item14                         YES      YES      YES       ---                  ---                  int(11) unsigned     <-- MISSING
+  item15                         YES      YES      YES       ---                  ---                  int(11) unsigned     <-- MISSING
+  item16                         YES      YES      YES       ---                  ---                  int(11) unsigned     <-- MISSING
+  item17                         YES      YES      YES       ---                  ---                  int(11) unsigned     <-- MISSING
+  item18                         YES      YES      YES       ---                  ---                  int(11) unsigned     <-- MISSING
+  item2                          YES      YES      YES       ---                  ---                  int(11) unsigned     <-- MISSING
+  item3                          YES      YES      YES       ---                  ---                  int(11) unsigned     <-- MISSING
+  item4                          YES      YES      YES       ---                  ---                  int(11) unsigned     <-- MISSING
+  item5                          YES      YES      YES       ---                  ---                  int(11) unsigned     <-- MISSING
+  item6                          YES      YES      YES       ---                  ---                  int(11) unsigned     <-- MISSING
+  item7                          YES      YES      YES       ---                  ---                  int(11) unsigned     <-- MISSING
+  item8                          YES      YES      YES       ---                  ---                  int(11) unsigned     <-- MISSING
+  item9                          YES      YES      YES       ---                  ---                  int(11) unsigned     <-- MISSING
+  name                           YES      YES      YES       ---                  ---                  varchar(128)         <-- MISSING
+  setguid                        YES      YES      YES       ---                  ---                  bigint(20) unsigned  <-- MISSING
+  setindex                       YES      YES      YES       ---                  ---                  tinyint(4)           <-- MISSING
+
+====== TABLE: item_instance ======
+  COLUMN                         CLASSIC  TBC      WOTLK     CLASSIC_TYPE         TBC_TYPE             WOTLK_TYPE          
+  ------                         -------  ---      -----     ------------         --------             ----------          
+  charges                        YES      YES      YES       text                 text                 text                
+  count                          YES      YES      YES       int(10) unsigned     int(10) unsigned     int(10) unsigned    
+  creatorGuid                    YES      YES      YES       int(10) unsigned     int(10) unsigned     int(10) unsigned    
+  durability                     YES      YES      YES       int(10) unsigned     int(5) unsigned      int(5) unsigned      <-- TYPE DIFF
+  duration                       YES      YES      YES       int(10) unsigned     int(10) unsigned     int(10) unsigned    
+  enchantments                   YES      YES      YES       text                 text                 text                
+  flags                          YES      YES      YES       int(10) unsigned     int(8) unsigned      int(8) unsigned      <-- TYPE DIFF
+  giftCreatorGuid                YES      YES      YES       int(10) unsigned     int(10) unsigned     int(10) unsigned    
+  guid                           YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  itemEntry                      YES      YES      YES       mediumint(8) unsigned mediumint(8) unsigned mediumint(8) unsigned
+  itemTextId                     YES      YES      YES       int(10) unsigned     int(8) unsigned      ---                  <-- MISSING
+  owner_guid                     YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  playedTime                     YES      YES      YES       ---                  ---                  int(10) unsigned     <-- MISSING
+  randomPropertyId               YES      YES      YES       smallint(6)          smallint(5)          smallint(5)          <-- TYPE DIFF
+  text                           YES      YES      YES       ---                  ---                  longtext             <-- MISSING
+
+====== TABLE: mail ======
+  COLUMN                         CLASSIC  TBC      WOTLK     CLASSIC_TYPE         TBC_TYPE             WOTLK_TYPE          
+  ------                         -------  ---      -----     ------------         --------             ----------          
+  body                           YES      YES      YES       ---                  ---                  longtext             <-- MISSING
+  checked                        YES      YES      YES       tinyint(3) unsigned  tinyint(3) unsigned  tinyint(3) unsigned 
+  cod                            YES      YES      YES       int(11) unsigned     int(11) unsigned     int(11) unsigned    
+  deliver_time                   YES      YES      YES       bigint(40) unsigned  bigint(40) unsigned  bigint(40) unsigned 
+  expire_time                    YES      YES      YES       bigint(40) unsigned  bigint(40) unsigned  bigint(40) unsigned 
+  has_items                      YES      YES      YES       tinyint(3) unsigned  tinyint(3) unsigned  tinyint(3) unsigned 
+  id                             YES      YES      YES       int(11) unsigned     int(11) unsigned     int(11) unsigned    
+  itemTextId                     YES      YES      YES       int(11) unsigned     int(11) unsigned     ---                  <-- MISSING
+  mailTemplateId                 YES      YES      YES       mediumint(8) unsigned mediumint(8) unsigned mediumint(8) unsigned
+  messageType                    YES      YES      YES       tinyint(3) unsigned  tinyint(3) unsigned  tinyint(3) unsigned 
+  money                          YES      YES      YES       int(11) unsigned     int(11) unsigned     int(11) unsigned    
+  receiver                       YES      YES      YES       int(11) unsigned     int(11) unsigned     int(11) unsigned    
+  sender                         YES      YES      YES       int(11) unsigned     int(11) unsigned     int(11) unsigned    
+  stationery                     YES      YES      YES       tinyint(3)           tinyint(3)           tinyint(3)          
+  subject                        YES      YES      YES       longtext             longtext             longtext            
+
+====== TABLE: corpse ======
+  COLUMN                         CLASSIC  TBC      WOTLK     CLASSIC_TYPE         TBC_TYPE             WOTLK_TYPE          
+  ------                         -------  ---      -----     ------------         --------             ----------          
+  corpse_type                    YES      YES      YES       tinyint(3) unsigned  tinyint(3) unsigned  tinyint(3) unsigned 
+  guid                           YES      YES      YES       int(11) unsigned     int(11) unsigned     int(11) unsigned    
+  instance                       YES      YES      YES       int(11) unsigned     int(11) unsigned     int(11) unsigned    
+  map                            YES      YES      YES       int(11) unsigned     int(11) unsigned     int(11) unsigned    
+  orientation                    YES      YES      YES       float                float                float               
+  phaseMask                      YES      YES      YES       ---                  ---                  smallint(5) unsigned <-- MISSING
+  player                         YES      YES      YES       int(11) unsigned     int(11) unsigned     int(11) unsigned    
+  position_x                     YES      YES      YES       float                float                float               
+  position_y                     YES      YES      YES       float                float                float               
+  position_z                     YES      YES      YES       float                float                float               
+  time                           YES      YES      YES       bigint(20) unsigned  bigint(20) unsigned  bigint(20) unsigned 
+
+====== TABLE: pet_aura ======
+  COLUMN                         CLASSIC  TBC      WOTLK     CLASSIC_TYPE         TBC_TYPE             WOTLK_TYPE          
+  ------                         -------  ---      -----     ------------         --------             ----------          
+  basepoints0                    YES      YES      YES       int(11)              int(11)              int(11)             
+  basepoints1                    YES      YES      YES       int(11)              int(11)              int(11)             
+  basepoints2                    YES      YES      YES       int(11)              int(11)              int(11)             
+  caster_guid                    YES      YES      YES       bigint(20) unsigned  bigint(20) unsigned  bigint(20) unsigned 
+  effIndexMask                   YES      YES      YES       int(11) unsigned     int(11) unsigned     int(11) unsigned    
+  guid                           YES      YES      YES       int(11) unsigned     int(11) unsigned     int(11) unsigned    
+  item_guid                      YES      YES      YES       int(11) unsigned     int(11) unsigned     int(11) unsigned    
+  maxduration                    YES      YES      YES       int(11)              int(11)              int(11)             
+  periodictime0                  YES      YES      YES       int(11) unsigned     int(11) unsigned     int(11) unsigned    
+  periodictime1                  YES      YES      YES       int(11) unsigned     int(11) unsigned     int(11) unsigned    
+  periodictime2                  YES      YES      YES       int(11) unsigned     int(11) unsigned     int(11) unsigned    
+  remaincharges                  YES      YES      YES       int(11) unsigned     int(11) unsigned     int(11) unsigned    
+  remaintime                     YES      YES      YES       int(11)              int(11)              int(11)             
+  spell                          YES      YES      YES       int(11) unsigned     int(11) unsigned     int(11) unsigned    
+  stackcount                     YES      YES      YES       int(11) unsigned     int(11) unsigned     int(11) unsigned    
+
+====== TABLE: pet_spell ======
+  COLUMN                         CLASSIC  TBC      WOTLK     CLASSIC_TYPE         TBC_TYPE             WOTLK_TYPE          
+  ------                         -------  ---      -----     ------------         --------             ----------          
+  active                         YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  guid                           YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+  spell                          YES      YES      YES       int(10) unsigned     int(11) unsigned     int(11) unsigned     <-- TYPE DIFF
+
+=== END SCHEMA COMPARISON ===

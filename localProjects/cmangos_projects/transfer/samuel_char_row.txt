@@ -1,0 +1,71 @@
+*************************** 1. row ***************************
+                guid: 1801
+             account: 12
+                name: Samuel
+                race: 1
+               class: 9
+              gender: 0
+               level: 60
+                  xp: 31
+               money: 37903267
+         playerBytes: 151585280
+        playerBytes2: 33947654
+         playerFlags: 2080
+          position_x: -8854.02
+          position_y: 655.903
+          position_z: 96.6168
+                 map: 0
+  dungeon_difficulty: 0
+         orientation: 5.69921
+            taximask: 3456411898 2148078929 49991 0 0 0 0 0 0 0 0 0 0 0 
+              online: 0
+           cinematic: 1
+           totaltime: 1202050
+           leveltime: 146378
+         logout_time: 1772560692
+   is_logout_resting: 1
+          rest_bonus: 0
+   resettalents_cost: 100000
+   resettalents_time: 1752771490
+             trans_x: 0
+             trans_y: 0
+             trans_z: 0
+             trans_o: 0
+           transguid: 0
+         extra_flags: 4
+        stable_slots: 0
+            at_login: 6
+                zone: 1519
+   death_expire_time: 0
+           taxi_path: 
+         arenaPoints: 0
+    totalHonorPoints: 0
+    todayHonorPoints: 0
+yesterdayHonorPoints: 0
+          totalKills: 0
+          todayKills: 0
+      yesterdayKills: 0
+         chosenTitle: 0
+     knownCurrencies: 0
+      watchedFaction: 42
+               drunk: 0
+              health: 7234
+              power1: 7348
+              power2: 0
+              power3: 0
+              power4: 100
+              power5: 0
+              power6: 0
+              power7: 0
+           specCount: 1
+          activeSpec: 0
+       exploredZones: 1121058871 2742896513 1082914479 2005094400 3321852831 4294451086 3929011967 1375756414 1073878092 1172766958 4249333247 4235171551 3175091455 1813033177 92842096 859871384 4292348222 824767063 4225492685 124987362 9307094 27205603 4260593412 3883925053 3998612975 3557589438 3200700059 2652937050 1027604480 1979997117 2147571383 1621281190 2148647891 252 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 
+      equipmentCache: 16808 0 17109 0 16807 0 859 0 16809 0 16806 0 16810 0 16803 0 16804 0 16805 0 19147 0 19147 0 18820 0 12930 0 13386 0 17103 0 19142 0 13396 0 0 0 14156 0 
+              ammoId: 0
+         knownTitles: 0 0 0 0 0 0 
+          actionBars: 15
+     grantableLevels: 0
+        fishingSteps: 2
+ deleteInfos_Account: NULL
+    deleteInfos_Name: NULL
+          deleteDate: NULL

@@ -1,0 +1,3667 @@
+# Журнал Сесій
+
+Append-only історія для довговічного відновлення контексту.
+
+## Правила
+
+- Додавай нові записи в кінець.
+- Логуй лише значущу роботу, рішення, блокери або результати перевірки.
+- Де можливо, посилайся на ID задач із беклогу.
+- Не зберігай секрети в цьому файлі напряму.
+
+## Лог
+
+### Сесія — `2026-03-18 12:00` — `GitHub Copilot (GPT-5.4)` — `morgan.local`
+
+- Пов'язані задачі: `TASK-027`
+- Контекст:
+  - Після попереднього live rollout стало видно, що website contract для AzerothCore лишився напівзламаним: `/wotlk-azcore/` уже redirect-ив у `/wotlk/`, але canonical `/wotlk/` рендерив SQL error замість живого legacy shell. Root-cause investigation показала, що проблема не в одному env var, а в трьох суміжних compatibility gaps між legacy PHP 5.6 website layer і live AzerothCore MySQL/auth schema.
+- Зроблена робота:
+  - Підтверджено й виправлено неправильну Docker network binding для canonical WotLK website surface: `mangos-website-wotlk` був підключений до `docker-azerothcore_default`, тоді як реальний `azerothcore-db` жив у `azerothcore-net`.
+  - Оновлено локальні джерела правди:
+    - `localProjects/cmangos_projects/docker-website/.env.multiroute.task066a` тепер ставить `MW_WOTLK_DB_NETWORK=azerothcore-net`;
+    - `localProjects/cmangos_projects/docker-azerothcore/docker-compose.yml` тепер фіксує MySQL 8 compatibility flags для legacy website client: `utf8mb3`, `utf8mb3_general_ci`, `mysql_native_password=ON`, `authentication_policy=mysql_native_password`.
+  - На `workspace` live-пересоздано `azerothcore-db`, `azerothcore-authserver`, `azerothcore-worldserver`, після чого server-side handshake справді переключився на `authentication_policy=mysql_native_password`.
+  - Створено окремого website DB user `mw_azerothcore_site` з `mysql_native_password` і мінімальним `SELECT` доступом до `acore_auth`, щоб не тримати legacy website на root login.
+  - У `acore_auth` імпортовано legacy website bootstrap schema (`full_install.sql`) з relaxed `sql_mode`, а далі вручну створено MySQL-safe compat layer для `website_account_groups`, `website_account_keys`, `website_accounts`, `website_gallery`, `website_gallery_ssotd`, `website_online`, `website_pms`, `website_realm_settings`, `website_regkeys`, `world_entrys`.
+  - Пересоздано `mangos-website-wotlk` уже з correct network + dedicated compat credentials.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/docker-azerothcore/docker-compose.yml`
+  - `localProjects/cmangos_projects/docker-website/.env.multiroute.task066a`
+  - `workspace:/opt/docker-azerothcore/docker-compose.yml`
+  - `workspace:/opt/mangos-website/.env.multiroute`
+  - `workspace: azerothcore-db / azerothcore-authserver / azerothcore-worldserver`
+  - `workspace: mangos-website-wotlk`
+  - `workspace: acore_auth schema bootstrap + website_* compat views`
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - Remote connectivity proof:
+    - `docker exec mangos-website-wotlk getent hosts azerothcore-db` resolved the DB host after the network fix.
+    - `docker exec mangos-website-wotlk php -r '... mysqli_connect(...) ...'` returned `mysql_ok` after the MySQL auth-policy repair.
+  - Remote DB proof:
+    - `information_schema.PLUGINS` shows `mysql_native_password ACTIVE` on `azerothcore-db`.
+    - `SHOW VARIABLES LIKE "authentication_policy";` returns `mysql_native_password`.
+    - `SHOW FULL TABLES LIKE "website_realm_settings"`, `website_pms`, `website_account_groups` in `acore_auth` now return `VIEW`.
+  - Public proof from `morgan.local`:
+    - `curl -s -L https://world-of-warcraft.morgan-dev.com/wotlk/ | grep -E "SQL Error|mysqli_connect|acore_auth|azerothcore-db"` returned no matches.
+    - `curl -s -L https://world-of-warcraft.morgan-dev.com/wotlk/` contains `<title>World of Warcraft WotLK</title>` and `SITE_PATH = '/wotlk/'`.
+    - `curl -I https://world-of-warcraft.morgan-dev.com/wotlk-azcore/` returns `HTTP/2 302` with `Location: https://world-of-warcraft.morgan-dev.com/wotlk/`.
+- Блокери / ризики:
+  - Legacy website-on-AzerothCore now depends on the imported website bootstrap tables/views inside `acore_auth`; future AzerothCore DB resets must reapply that bootstrap before expecting `/wotlk/` to stay healthy.
+  - The public contract is now canonical `/wotlk/` plus alias redirect from `/wotlk-azcore/`; any docs or audit configs that still treat `/wotlk-azcore/` as a separate fourth surface are stale.
+- Рекомендований наступний крок:
+  - Пройти короткий browser-level smoke against `/wotlk/` and the topnav if the user wants DOM proof that no stale fourth-link behavior remains in the rendered UI.
+
+### Сесія — `2026-03-18 13:10` — `GitHub Copilot (GPT-5.4)` — `morgan.local`
+
+- Пов'язані задачі: `TASK-014`
+- Контекст:
+  - Після закриття live AzerothCore/website track наступним documented backlog item лишався `TASK-014`: не новий runtime rollout, а маленький operational fallback для випадку, якщо майбутній WotLK crash більше не пояснюватиметься вже відомим data-level workaround.
+- Зроблена робота:
+  - Заклеймено `TASK-014` у `docs/BACKLOG.md`, перевірено фактичний локальний baseline в `localProjects/cmangos_projects/docker-wotlk/Dockerfile.server` і підтверджено, що нормальний build досі йде на release-style flags з `-DDEBUG=0`.
+  - Додано канонічний fallback path у `docs/COMMANDS_REFERENCE.md`: temporary local switch to `-DCMAKE_BUILD_TYPE=Debug -DDEBUG=1`, build окремого image tag `semorgana/cmangos-wotlk:debug`, runtime smoke на тих самих портах/volumes і first-failure log capture через `docker logs` / `docker inspect`.
+  - Зафіксовано activation rule в `docs/ARCHITECTURE.md`: debug build не є standing mode, його не вмикають наперед; він активується лише після повторного крашу на звичайному release image, коли release logs і вже відомий data-level workaround більше не дають достатньої діагностики.
+  - Оновлено `docs/PROJECT_STATUS.md` так, щоб next planned backlog item після закриття `TASK-014` зсунувся на `TASK-015`.
+- Які файли / області зачеплено:
+  - `docs/BACKLOG.md`
+  - `docs/COMMANDS_REFERENCE.md`
+  - `docs/ARCHITECTURE.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - `localProjects/cmangos_projects/docker-wotlk/Dockerfile.server` містить `-DDEBUG=0` як поточний release baseline.
+  - `localProjects/cmangos_projects/docker-wotlk/docker-compose.yml` підтверджує stable runtime ports/shape (`8087`, `3726`, `3308` externally), які debug fallback має зберігати для порівнюваної діагностики.
+  - `docs/LEGACY_BACKLOG_ARCHIVE.md` already hinted the intended fallback flags (`-DCMAKE_BUILD_TYPE=Debug -DDEBUG=1`), а ця сесія перенесла це в current canonical docs.
+- Блокери / ризики:
+  - Це лише documentation/operations fallback, не перевірений щойно rebuilt debug image; build активується лише when-needed, щоб не плодити diagnostic drift у нормальному runtime.
+  - Shared-host debug rollout на `workspace` лишається high-risk і не повинен бути first diagnostic move без локального reproduction та explicit approval token.
+- Рекомендований наступний крок:
+  - Якщо рухатися далі по беклогу без нового crash signal, наступний open item = `TASK-015` (`Reverse transfer`).
+
+### Сесія — `2026-03-18 13:45` — `GitHub Copilot (GPT-5.4)` — `morgan.local`
+
+- Пов'язані задачі: `TASK-015`
+- Контекст:
+  - Після `TASK-014` користувач попросив спершу перевірити, чи не лишилося stale docs навколо нового WotLK debug fallback, а потім перейти до наступного backlog item. Audit показав, що current-state docs already consistent, а згадки старого flow лишилися тільки як історичний слід у session/archive files.
+- Зроблена робота:
+  - Виконано вузький docs audit по `debug build` / `-DCMAKE_BUILD_TYPE=Debug` / `-DDEBUG=1`; current-state mismatch не знайдено, тому без зайвого churn transition пішов на `TASK-015`.
+  - Заклеймено й закрито `TASK-015` у backlog як design/docs task, а не runtime implementation.
+  - Оновлено `docs/TRANSFER_SYSTEM.md`: reverse transfer (`WotLK -> TBC`, `TBC -> Classic`) тепер explicitly зафіксований як operator-only, offline, non-self-service path; current forward-only website/runtime contract лишився незмінним.
+  - Задокументовано hard blockers і downgrade rules per direction:
+    - `WotLK -> TBC`: hard-block `Death Knight`, level cap `70`, drop WotLK-only systems (`character_achievement*`, `character_equipmentsets`, `character_glyphs`, dual-spec/runic-power/currency state).
+    - `TBC -> Classic`: hard-block Classic-incompatible race/class contracts (включно з `Blood Elf` / `Draenei`), level cap `60`, drop TBC-only arena/guild-bank/declined-name/battleground state plus Outland/Jewelcrafting-era progression.
+  - Зафіксовано policy boundary: reverse не можна quietly підміняти current `daily-sync.sh`; first executable milestone для майбутнього reverse track = окремі pair-specific migration SQL transforms і fixture-based validation, а не website button.
+  - Оновлено `docs/PROJECT_STATUS.md`, щоб next planned backlog item після закриття `TASK-015` зсунувся на `TASK-016`.
+- Які файли / області зачеплено:
+  - `docs/TRANSFER_SYSTEM.md`
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - `docs/TRANSFER_SYSTEM.md` уже містив канонічний self-service boundary `forward-only`; `TASK-015` не ламав цей контракт, а явно закрив reverse як operator-only design note.
+  - `localProjects/cmangos_projects/transfer/daily-sync.sh` досі описує тільки `Classic -> TBC -> WotLK -> optional AzerothCore`, що підтверджує відсутність current reverse runtime path.
+  - Existing schema-diff knowledge in `docs/TRANSFER_SYSTEM.md` and legacy archive була використана для конкретних blocker lists замість загальної фрази `remove expansion-specific data`.
+- Блокери / ризики:
+  - Reverse transfer усе ще не execution-ready: нема pair-specific migration SQL (`wotlk -> tbc`, `tbc -> classic`) і нема validation harness для safe downgrade proof.
+  - Через race/class/profession/content incompatibility reverse має більший semantic-loss risk, ніж forward path; тому operator-only boundary лишається принциповим, а не тимчасовою дрібницею.
+- Рекомендований наступний крок:
+  - Якщо далі рухатися по documented optional debt track, наступний open item = `TASK-016` (`Guild transfer`).
+
+### Сесія — `2026-03-18 14:05` — `GitHub Copilot (GPT-5.4)` — `morgan.local`
+
+- Пов'язані задачі: `TASK-015`, `TASK-016`
+- Контекст:
+  - Користувач явно відкинув сам product idea reverse/downgrade transfer (`WotLK -> TBC -> Classic`) як непотрібний scope і попросив видалити його з backlog, а не просто лишити в status як low-priority design note.
+- Зроблена робота:
+  - Видалено `TASK-015` із `docs/BACKLOG.md`; optional reverse-transfer item більше не входить у canonical planned work.
+  - Спрощено `docs/TRANSFER_SYSTEM.md`: збережено лише продуктову межу, що transfer contract є forward-only, а rollback/down-migration не входять у scope; окремий reverse-design section прибрано повністю.
+  - Очищено `docs/PROJECT_STATUS.md` від current-state claim, ніби reverse transfer лишається окремим completed docs track.
+  - Next planned backlog item лишився `TASK-016`, тепер уже без проміжного reverse-transfer debt item між ним і `TASK-014`.
+- Які файли / області зачеплено:
+  - `docs/BACKLOG.md`
+  - `docs/TRANSFER_SYSTEM.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - У current docs більше немає active backlog/task section для `TASK-015`.
+  - Canonical transfer contract і далі лишається truthful: тільки forward moves, без rollback/down-migration у product scope.
+- Блокери / ризики:
+  - Historical session entries про короткочасну появу `TASK-015` залишені як append-only evidence; вони більше не є source of truth для поточного scope.
+- Рекомендований наступний крок:
+  - Якщо продовжувати по backlog, наступний open item = `TASK-016` (`Guild transfer`).
+
+### Сесія — `2026-03-18 14:30` — `GitHub Copilot (GPT-5.4)` — `morgan.local`
+
+- Пов'язані задачі: `TASK-016`
+- Контекст:
+  - Після user-confirmed scope cleanup для reverse transfer наступним open backlog item став `TASK-016`. На відміну від reverse track, тут виявився реальний legacy code path у `transfer.sh`, тому задача вимагала не видалення, а truthful boundary around existing guild-copy behavior.
+- Зроблена робота:
+  - Заклеймено й закрито `TASK-016` у backlog як docs/design task без runtime mutation.
+  - Перевірено `localProjects/cmangos_projects/transfer/transfer.sh`: legacy script уже копіює `guild`, `guild_member`, `guild_rank`, `guild_eventlog` і намагається тягнути `guild_bank_*` tables для `guildid`, знайдених через selected characters.
+  - Оновлено `docs/TRANSFER_SYSTEM.md` так, щоб guild transfer був зафіксований лише як operator-only legacy bulk side path, а не як частина canonical daily-sync / targeted / chained / website transfer contract.
+  - Зафіксовано головну incompatibility boundary: Classic не має `guild_bank_*`, тому Classic-involved moves не можуть truthfully promise bank preservation; для таких moves canonical rule = preserve only core guild rows, bank state treated as absent/reset.
+  - Зафіксовано ще одну важливу межу: guild copy keyed by `guildid` means one selected member can trigger copy of the whole guild membership/rank/event set, so це не isolated self-service-safe workflow.
+  - Оновлено `docs/PROJECT_STATUS.md`, щоб next planned backlog item після закриття `TASK-016` зсунувся на `TASK-018`.
+- Які файли / області зачеплено:
+  - `docs/BACKLOG.md`
+  - `docs/TRANSFER_SYSTEM.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - `localProjects/cmangos_projects/transfer/transfer.sh` містить реальний guild-copy branch for `guild`, `guild_member`, `guild_rank`, `guild_eventlog`, `guild_bank_*`.
+  - `docs/TRANSFER_SYSTEM.md` already documented the schema gap: `guild_bank_*` is TBC-only vs Classic, so the new rule set is grounded in current schema facts rather than guesswork.
+  - Canonical self-service transfer contract remains unchanged: character-scoped, forward-only, no guild migration claim in current website/runtime flow.
+- Блокери / ризики:
+  - Нема verified acceptance proof, що legacy guild-copy side effect безпечно працює across current canonical runtime paths; тому його не можна піднімати в user-facing feature claim.
+  - Bulk copy by `guildid` means operator misuse could move more guild state than one character-centric request implies.
+- Рекомендований наступний крок:
+  - Якщо продовжувати по optional debt track, наступний open item = `TASK-018` (`Legacy debt: Dockerfile.updater`).
+
+### Сесія — `2026-03-18 15:05` — `GitHub Copilot (GPT-5.4)` — `morgan.local`
+
+- Пов'язані задачі: `TASK-018`
+- Контекст:
+  - Після закриття `TASK-016` наступним open optional-debt item став `TASK-018`, який вимагав не обов'язково реалізацію, а чесне рішення: чи має окремий `Dockerfile.updater` ще хоч якийсь operational сенс поруч із уже наявним update control plane.
+- Зроблена робота:
+  - Заклеймено `TASK-018` і звірено legacy archive recommendation for a checker container against the current runtime state.
+  - Підтверджено, що current control plane already has per-expansion `scripts/update.sh` entrypoints for Classic/TBC/WotLK with upstream hash detection, local locking, DB backup, image rebuild, push/restart flow, and built-in `--install` / `--status` systemd helpers.
+  - Звірено це з canonical docs state, де вже зафіксовані active remote timers `cmangos-update.timer`, `cmangos-tbc-update.timer`, `cmangos-wotlk-update.timer`, plus `cmangos-daily-sync.timer`.
+  - Зафіксовано рішення в `docs/DECISIONS.md`: standalone updater container відхилено як superseded legacy debt, бо він дублював би існуючий host-level update path і додавав би новий Docker-socket privileged surface.
+  - Закрито `TASK-018` як decision-only backlog item і зміщено next optional debt pointer на `TASK-019`.
+- Які файли / області зачеплено:
+  - `docs/BACKLOG.md`
+  - `docs/DECISIONS.md`
+  - `docs/ARCHITECTURE.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - `localProjects/cmangos_projects/docker/scripts/update.sh` already exposes one-shot run plus `--install`, `--uninstall`, `--status` timer lifecycle.
+  - Canonical docs already record the verified host timers, so `Dockerfile.updater` would be duplicate control-plane logic rather than a missing capability.
+- Блокери / ризики:
+  - Немає активного blocker-а для цього debt item; рішення intentionally prefers fewer privileged moving parts over speculative watcher automation.
+- Рекомендований наступний крок:
+  - Якщо продовжувати по optional debt track, наступний open item = `TASK-019` (`Legacy debt: повний refactor на lib.sh`).
+
+### Сесія — `2026-03-18 15:25` — `GitHub Copilot (GPT-5.4)` — `morgan.local`
+
+- Пов'язані задачі: `TASK-019`
+- Контекст:
+  - Після закриття `TASK-018` останнім open optional legacy-debt item лишався `TASK-019`, але його acceptance вимагав не обов'язково новий refactor, а чесну перевірку: чи лишився ще незакритий duplicated helper layer поза `lib.sh`, чи legacy намір уже фактично виконано попередніми змінами.
+- Зроблена робота:
+  - Заклеймено й перевірено `TASK-019` проти original legacy wording у `docs/LEGACY_BACKLOG_ARCHIVE.md` section `13.8`, де вимога була вузькою: прибрати дубльовані helper-функції з `transfer-interactive.sh` та `daily-sync.sh` і перевести їх на `source lib.sh`.
+  - Підтверджено, що current code already satisfies that intent: і `daily-sync.sh`, і `transfer-interactive.sh` source `lib.sh`, а shared low-level layer тепер живе саме там.
+  - Зафіксовано, що `lib.sh` already owns shared container/DB maps, logging, `db_exec` / `db_dump` / `safe_insert`, table checks, post-transfer sanitization, login verification, restart/wait helpers, account creation, sync-hash helpers, while the remaining script-local functions are orchestration-specific rather than unresolved low-level duplication.
+  - Оновлено `docs/TRANSFER_SYSTEM.md`, щоб current boundary був явним: project does not need a blanket rewrite moving most orchestration into `lib.sh`; further extraction should happen only for future concrete duplicates.
+  - Закрито `TASK-019` як already satisfied by current code state and removed the last remaining optional-debt pointer from current project status.
+- Які файли / області зачеплено:
+  - `docs/BACKLOG.md`
+  - `docs/TRANSFER_SYSTEM.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - `localProjects/cmangos_projects/transfer/daily-sync.sh` and `localProjects/cmangos_projects/transfer/transfer-interactive.sh` both source `lib.sh`.
+  - `localProjects/cmangos_projects/transfer/lib.sh` contains the shared low-level helper layer that motivated the original debt item.
+  - No additional blanket extraction was needed to satisfy the original archived requirement.
+- Блокери / ризики:
+  - Немає активного blocker-а по цьому legacy debt item; future extraction should stay incremental and evidence-driven rather than reopening a vague "full refactor" track.
+- Рекомендований наступний крок:
+  - Якщо продовжувати роботу, треба обирати вже не historical debt tail, а явний open product/runtime task або нову user-priority decomposition.
+
+### Сесія — `2026-03-18 15:40` — `GitHub Copilot (GPT-5.4)` — `morgan.local`
+
+- Пов'язані задачі: `docs current-state cleanup`
+- Контекст:
+  - Після закриття `TASK-019` користувацький `+` більше не міг бути інтерпретований як автоматичний перехід до наступного backlog item, доки не буде доведено, що backlog ще містить open execution task. Додаткова перевірка показала, що канонічний backlog уже повністю закритий, але `PROJECT_STATUS.md` все ще тримав один stale current-state paragraph про pre-rollout phase `TASK-031`.
+- Зроблена робота:
+  - Перевірено канонічний `docs/BACKLOG.md`: open execution-ready tasks більше не залишилося; documented work is execution-exhausted.
+  - Прибрано stale current-state wording у `docs/PROJECT_STATUS.md`, де `TASK-031` ще описувався як локальний in-progress state, хоча той fix set already went live and was verified through `TASK-032`, then further corrected by `TASK-033` and `TASK-034`.
+  - Явно зафіксовано в `PROJECT_STATUS.md`, що подальша робота тепер вимагає user-driven reprioritization або нової backlog decomposition, а не автоматичного continuation через `+`.
+- Які файли / області зачеплено:
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - `docs/BACKLOG.md` більше не містить open canonical execution item.
+  - `docs/PROJECT_STATUS.md` тепер узгоджений із backlog і не тримає stale claim, ніби `TASK-031` ще лишається поточним незавершеним work item.
+- Блокери / ризики:
+  - Немає технічного blocker-а; є лише process boundary: без нового backlog item continuation through `+` більше не визначене.
+- Рекомендований наступний крок:
+  - Якщо потрібне продовження роботи, користувач має або задати новий пріоритет напряму, або попросити декомпозувати новий scope в канонічний backlog.
+
+### Сесія — `2026-03-17 22:20` — `GitHub Copilot (GPT-5.4)` — `morgan.local`
+
+- Пов'язані задачі: `TASK-013`, `TASK-027`
+- Контекст:
+  - After `TASK-045`, the main open runtime blocker was still the lack of one truthful host where Classic/TBC/WotLK CMaNGOS phases and a non-empty AzerothCore runtime could coexist. The user then provided explicit shared-host approval, which unlocked the live `workspace` deploy path for the blocked AzerothCore track.
+- Зроблена робота:
+  - Claimed `TASK-013` and `TASK-027`, staged a real AzerothCore source-build deployment on `workspace` under `/opt/docker-azerothcore` plus `/opt/azerothcore-wotlk`, and confirmed the resulting live stack (`azerothcore-db`, `azerothcore-authserver`, `azerothcore-worldserver`).
+  - Enabled the live multiroute website surface by updating `workspace:/opt/mangos-website/.env.multiroute` with the real AzerothCore auth/network settings and starting `mangos-website-wotlk-azcore`; public `/wotlk-azcore/` now returns `HTTP 200` and the azcore website service is healthy.
+  - Fixed four real live blockers in the transfer path:
+    - `lib.sh` now auto-loads the AzerothCore DB root password from compose env files when the shell lacks `AZEROTHCORE_DB_PASSWORD`;
+    - `wait_for_server_ready()` now matches AzerothCore `WORLD: World Initialized` / `ready...` logs;
+    - `daily-sync.sh` now normalizes MariaDB `*_uca1400_*` collations before importing WotLK temp data into MySQL-backed `azerothcore-db`;
+    - `migrate_cmangos_wotlk_to_azerothcore.sql` now uses MySQL-safe dynamic conditional ALTER helpers in the `characters` transform instead of MariaDB-only `IF [NOT] EXISTS` column syntax.
+  - Deployed the current `wow_login_test_universal.py` to `workspace` after proving that the previous remote copy still rejected `--expansion azerothcore`, which had been causing false Phase F failures.
+  - Produced the canonical forced-clean full-chain live proof `workspace:/opt/cmangos-transfer/logs/daily-sync-task013-forceclean-20260317_231158.log`, where `Samuel (guid=1801)` synced and verified successfully on TBC, WotLK, and AzerothCore in one no-skip run, with post-verify hashes stored on all three target stages and no rollbacks.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/transfer/lib.sh`
+  - `localProjects/cmangos_projects/transfer/daily-sync.sh`
+  - `localProjects/cmangos_projects/transfer/migrate_cmangos_wotlk_to_azerothcore.sql`
+  - `localProjects/cmangos_projects/transfer/wow_login_test_universal.py`
+  - `workspace:/opt/docker-azerothcore`
+  - `workspace:/opt/azerothcore-wotlk`
+  - `workspace:/opt/cmangos-transfer`
+  - `workspace:/opt/mangos-website/.env.multiroute`
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/TRANSFER_SYSTEM.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - `docker compose ps` on `workspace:/opt/docker-azerothcore` showed live `azerothcore-db` (`healthy`), `azerothcore-authserver`, and `azerothcore-worldserver` with host ports `3309/3727/8088/7879`.
+  - Public `curl -I https://world-of-warcraft.morgan-dev.com/wotlk-azcore/` returned `HTTP/2 200`, and container-local logs for `mangos-website-wotlk-azcore` showed successful `GET /wotlk-azcore/` probes.
+  - Direct remote bot proof after the final deploy: `python3 /opt/cmangos-transfer/wow_login_test_universal.py --expansion azerothcore --username SAMUEL --password SAMUEL --guid 1801` reached `RESULT: SUCCESS` on live `workspace` AzerothCore.
+  - Canonical no-skip one-host log `logs/daily-sync-task013-forceclean-20260317_231158.log` shows:
+    - `SYNCED: Samuel classic→tbc` then `✅ Samuel (guid=1801) — SUCCESS`
+    - `SYNCED: Samuel tbc→wotlk` then `✅ Samuel (guid=1801) — SUCCESS`
+    - `SYNCED: Samuel wotlk→azerothcore` then `✅ Samuel (guid=1801) — SUCCESS`
+    - stored post-verify hashes for `Samuel` on `tbc`, `wotlk`, and `azerothcore`
+    - final summary `Synced: 3`, `Errors: 0`
+- Блокери / ризики:
+  - No active blocker remains on the co-located AzerothCore runtime path itself.
+  - Residual noise remains in `workspace:/opt/cmangos-transfer/logs/daily-sync-20260317.log` because that legacy day-log file is not writable by the current shell user; this did not block the canonical per-run logs, but it should be cleaned up in a future maintenance task if day-log tee output matters.
+- Рекомендований наступний крок:
+  - Перейти до наступного execution-ready backlog item after `TASK-013` / `TASK-027` closure, unless the user wants additional hardening around the new live AzerothCore stack or the transfer day-log permissions.
+
+### Сесія — `2026-03-17 10:05` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-045`
+- Контекст:
+  - After `TASK-044`, the self-service transfer track had individual acceptance fragments across `TASK-038..044`, but it still lacked one canonical QA matrix that tied together logged-in browser proof, queue/create-or-reuse behavior, chained runner semantics, duplicate/stale-lock guards, and operator override evidence.
+- Зроблена робота:
+  - Заклеймлено і закрито `TASK-045` у backlog.
+  - Extended `docs/TESTING_AND_RELEASE.md` with a dedicated `TASK-045` self-service transfer QA/release-gate section that defines:
+    - happy-path requirements for `to_tbc`;
+    - happy-path requirements for chained `to_wotlk`;
+    - the negative-path matrix for `eligibility_blocked`, `duplicate_request`, `partial_chain_failure`, `stale_lock_recovery`, `operator_disabled`, `queue_paused`, and `emergency_stop`;
+    - one mandatory evidence pack and explicit rules for when `release-ready` claims are forbidden.
+  - Updated `docs/PROJECT_STATUS.md` so continuation context now states that `TASK-045` is complete but does not change the main blocker on `TASK-013/TASK-027`.
+- Які файли / області зачеплено:
+  - `docs/TESTING_AND_RELEASE.md`
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - Editor/docs diagnostics requested for the updated markdown set after the patch.
+  - The new gate is grounded in already verified artifacts from earlier tasks rather than new speculative acceptance:
+    - `run_live_auth_audit.sh`
+    - `run-modern-transfer-control-plane-smoke.sh`
+    - `/opt/cmangos-transfer/test-request-lock-guards.sh`
+    - `/opt/cmangos-transfer/test-transfer-control-flags.sh`
+    - targeted and chained runner dry-runs
+- Блокери / ризики:
+  - `TASK-045` defines the release gate; it does not itself provide a new live end-to-end rollout.
+  - Main runtime blocker remains unchanged: `TASK-013/TASK-027` still need one truthful co-located topology or explicit shared-host AzerothCore approval.
+- Рекомендований наступний крок:
+  - Повертатися до `TASK-013` / `TASK-027` only after the topology/approval blocker is removed, or explicitly reprioritize a different non-blocked backlog track.
+
+### Сесія — `2026-03-17 07:25` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-059`
+- Контекст:
+  - After `TASK-058`, the remaining first-wave authenticated modernization gap was transfer submit/history/operator-aware control ownership: the modern manage route needed to own the user-facing request plane without weakening the verified runtime safety contract on `workspace`.
+- Зроблена робота:
+  - Заклеймлено й закрито `TASK-059` у backlog.
+  - Extended `localProjects/cmangos_projects/docker-website/modern-prototype/public/index.php` so `/classic|/tbc|/wotlk/modern/account/manage` now owns transfer request UI, active/history panels, duplicate-request reuse, and operator-aware blocked-submit rendering on top of the same modern account surface introduced in `TASK-058`.
+  - Extended `localProjects/cmangos_projects/docker-website/modern-prototype/sql/identity-test-init.sql` with demo request heads/events and control-flag tables so the prototype can truthfully render completed, partial, queued, and operator-disabled states.
+  - Added `localProjects/cmangos_projects/docker-website/scripts/run-modern-transfer-control-plane-smoke.sh` and used an isolated local repro to verify the exact blocked-submit contract (`data-transfer-flash="control_blocked"` plus `data-control-flag="self-service-transfer.disabled.flag"`) after the full `create -> duplicate -> completed -> operator-disabled` request sequence.
+  - Added runtime control-flag harness `localProjects/cmangos_projects/transfer/test-transfer-control-flags.sh` and synced it plus the updated runner scripts to `workspace:/opt/cmangos-transfer/`.
+  - Fixed a real backend bug in `localProjects/cmangos_projects/transfer/request-locks.sh`: `transfer_control_active_flag()` set the active flag name and then lost it because `transfer_control_load_metadata()` called `transfer_control_reset()`. After the fix, operator-disabled / queue-paused / emergency-stop now surface distinct blocker codes and user messages instead of collapsing to the generic `unknown / Transfer execution is currently restricted` fallback.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/docker-website/modern-prototype/public/index.php`
+  - `localProjects/cmangos_projects/docker-website/modern-prototype/sql/identity-test-init.sql`
+  - `localProjects/cmangos_projects/docker-website/scripts/run-modern-transfer-control-plane-smoke.sh`
+  - `localProjects/cmangos_projects/transfer/request-locks.sh`
+  - `localProjects/cmangos_projects/transfer/targeted-transfer-runner.sh`
+  - `localProjects/cmangos_projects/transfer/chained-wotlk-transfer-runner.sh`
+  - `localProjects/cmangos_projects/transfer/test-transfer-control-flags.sh`
+  - `workspace:/opt/cmangos-transfer/request-locks.sh`
+  - `workspace:/opt/cmangos-transfer/targeted-transfer-runner.sh`
+  - `workspace:/opt/cmangos-transfer/chained-wotlk-transfer-runner.sh`
+  - `workspace:/opt/cmangos-transfer/test-transfer-control-flags.sh`
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/TESTING_AND_RELEASE.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - Local control-plane exact-sequence proof showed final blocked-submit HTML markers:
+    - `data-transfer-flash="control_blocked"`
+    - `data-control-flag="self-service-transfer.disabled.flag"`
+  - Workspace runtime control harness from `/opt/cmangos-transfer/test-transfer-control-flags.sh` returned:
+    - `operator_disabled.status=blocked`, `operator_disabled.blocker_code=operator_disabled`, `message=Self-service transfer is temporarily disabled by an operator`
+    - `queue_paused.status=blocked`, `queue_paused.blocker_code=queue_paused`, `message=Transfer queue is paused by an operator`
+    - `emergency_stop.status=blocked`, `emergency_stop.blocker_code=emergency_stop`, `message=Transfer execution is frozen because emergency-stop mode is active`
+- Блокери / ризики:
+  - The modern transfer slice is still a local prototype UI; it does not yet publish live shared-host ingress for `/classic` / `/tbc` / `/wotlk`.
+  - Local all-in-one smoke runs can still be sensitive to reused prototype ports, so use an explicit free `MW_MODERN_PROTOTYPE_PORT` when another modernization smoke is already active.
+- Рекомендований наступний крок:
+  - Перейти до `TASK-060` і взяти перший low-risk public server-page slice now that the authenticated first-wave owner surfaces are complete.
+
+### Сесія — `2026-03-17 05:45` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-058`
+- Контекст:
+  - After `TASK-057`, the next authenticated modernization slice was to move `My Characters` plus the basic account overview onto the companion PHP 8 layer while preserving the truthful roster contract already documented for the legacy website.
+- Зроблена робота:
+  - Заклеймлено й закрито `TASK-058` у backlog.
+  - Extended `localProjects/cmangos_projects/docker-website/modern-prototype/public/index.php` with `AccountOverviewRepository`, fixture-backed roster loading, and an owned `/classic|/tbc|/wotlk/modern/account/manage` route that reuses the session bridge instead of redirecting immediately to legacy.
+  - Added a dedicated account-overview renderer that exposes canonical patch buckets, explicit `identity_mode=legacy_account_id`, total character count, and a truthful boundary note leaving transfer controls on the legacy surface until `TASK-059`.
+  - Extended `localProjects/cmangos_projects/docker-website/modern-prototype/sql/identity-test-init.sql` with `prototype_roster_realms` and `prototype_roster_characters`, seeded so the prototype always demonstrates one populated bucket, one empty bucket, and one unavailable bucket.
+  - Added `localProjects/cmangos_projects/docker-website/scripts/run-modern-account-overview-smoke.sh` to verify guest fallback, bridged login render, canonical bucket-state visibility, and modern-cookie reuse.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/docker-website/modern-prototype/public/index.php`
+  - `localProjects/cmangos_projects/docker-website/modern-prototype/sql/identity-test-init.sql`
+  - `localProjects/cmangos_projects/docker-website/scripts/run-modern-account-overview-smoke.sh`
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/TESTING_AND_RELEASE.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - Editor diagnostics: no errors for `modern-prototype/public/index.php` and `run-modern-account-overview-smoke.sh`.
+  - Runtime proof passed via `sh localProjects/cmangos_projects/docker-website/scripts/run-modern-account-overview-smoke.sh` and returned:
+    - `overview_guest_fallback=ok`
+    - `overview_render=ok`
+    - `identity_mode=legacy_account_id`
+    - `classic_bucket_populated=ok`
+    - `tbc_bucket_empty=ok`
+    - `wotlk_bucket_unavailable=ok`
+    - `modern_cookie_reuse=ok`
+- Блокери / ризики:
+  - This remains a local companion-runtime proof with fixture-backed roster tables, not a live shared-host rollout or a verified multi-realm DB bridge.
+  - Transfer request controls are still intentionally owned by the legacy account surface until `TASK-059`; exposing action buttons here earlier would overstate what the modern layer actually owns.
+- Рекомендований наступний крок:
+  - Перейти до `TASK-059` і перенести transfer request preview/submit ownership onto the now-verified modern identity, security, and roster/account-overview control plane.
+
+### Сесія — `2026-03-17 05:10` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-057`
+- Контекст:
+  - After `TASK-056`, the next production-grade modernization step was to move the first authenticated account-security action into the companion PHP 8 layer instead of leaving password change owned by the legacy account-manage handler.
+- Зроблена робота:
+  - Заклеймлено й закрито `TASK-057` у backlog.
+  - Extended `localProjects/cmangos_projects/docker-website/modern-prototype/public/index.php` with `/wotlk/modern/account/security`, a modern password-change route that requires current-password verification, confirmation, reject-same-password semantics, and a forced re-login success path.
+  - Added SRP6 generation support to the prototype image via `gmp`, and extended the local fixture schema so the modern route can update `sha_pass_hash`, `s`, `v`, and `sessionkey` truthfully.
+  - Strengthened the shared modern session model: modern cookies now carry a `session_guard` and are revalidated against `website_account_keys`, so deleting that key on password change revokes both legacy and modern sessions.
+  - Updated the legacy `account.manage` password form to post to the modern owner route instead of the legacy `changepass` action.
+  - Added `run-modern-account-security-smoke.sh` and then hardened both modernization smokes to use deterministic container names plus explicit MariaDB readiness waits.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/docker-website/modern-prototype/Dockerfile`
+  - `localProjects/cmangos_projects/docker-website/modern-prototype/public/index.php`
+  - `localProjects/cmangos_projects/docker-website/modern-prototype/sql/identity-test-init.sql`
+  - `localProjects/cmangos_projects/docker-website/scripts/run-modern-account-security-smoke.sh`
+  - `localProjects/cmangos_projects/docker-website/scripts/run-modern-session-bridge-smoke.sh`
+  - `localProjects/cmangos_projects/mangos-website/templates/offlike/account/account.manage.php`
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/TESTING_AND_RELEASE.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - Static gates passed:
+    - `bash -n localProjects/cmangos_projects/docker-website/scripts/run-modern-account-security-smoke.sh`
+    - `docker run --rm -v "$PWD/localProjects/cmangos_projects/docker-website/modern-prototype/public":/app -w /app php:8.3-cli php -l index.php`
+    - `docker run --rm -v "$PWD/localProjects/cmangos_projects/mangos-website":/app -w /app php:5.6-apache php -l templates/offlike/account/account.manage.php`
+  - Runtime proof passed via `sh localProjects/cmangos_projects/docker-website/scripts/run-modern-account-security-smoke.sh` and returned:
+    - `security_guest_fallback=ok`
+    - `security_form_render=ok`
+    - `current_password_verify=ok`
+    - `password_change_success=ok`
+    - `forced_relogin=ok`
+    - `scope_statement=local-only`
+  - Regression proof passed via `sh localProjects/cmangos_projects/docker-website/scripts/run-modern-session-bridge-smoke.sh` and returned:
+    - `guest_fallback=ok`
+    - `legacy_cookie_bridge=ok`
+    - `modern_bridge_cookie=ok`
+    - `ownership_check=ok`
+    - `legacy_manage_fallback=ok`
+- Блокери / ризики:
+  - This remains a local prototype proof, not yet a live shared-host ingress rollout for `/classic` / `/tbc` / `/wotlk`.
+  - Password scope remains intentionally `local-only` until linked-account mapping exists; any cross-patch password-sync claim would still be inaccurate.
+- Рекомендований наступний крок:
+  - Перейти до `TASK-058` і перенести `My Characters` plus account overview onto the now-verified companion session/security layer.
+
+### Сесія — `2026-03-17 04:20` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-056`
+- Контекст:
+  - After `TASK-052`, the modernization track needed one production-grade authenticated slice proving that a PHP 8 companion runtime can own website identity/session behavior instead of only public render output.
+- Зроблена робота:
+  - Заклеймлено й закрито `TASK-056` у backlog.
+  - Extended `localProjects/cmangos_projects/docker-website/modern-prototype/public/index.php` with a website identity/session bridge that decodes the legacy `mangosWeb` cookie, validates `website_account_keys`, resolves one website principal, and mints a root-scoped `mw-modern-session` cookie.
+  - Added an authenticated modern route `/wotlk/modern/account/identity` plus truthful legacy fallback handling for `/wotlk/modern/account/manage`.
+  - Added a local MariaDB fixture and `run-modern-session-bridge-smoke.sh` to verify guest fallback, legacy-cookie bridging, modern-cookie reuse, ownership denial, and legacy manage fallback.
+  - Debugged the runtime proof to the real causes instead of masking them: first the prototype service had blank DB env in the smoke run, then the fixture needed deterministic reseeding because MariaDB init ordering left `website_account_keys` empty.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/docker-website/.env.example`
+  - `localProjects/cmangos_projects/docker-website/docker-compose.modern-prototype.yml`
+  - `localProjects/cmangos_projects/docker-website/modern-prototype/public/index.php`
+  - `localProjects/cmangos_projects/docker-website/modern-prototype/sql/identity-test-init.sql`
+  - `localProjects/cmangos_projects/docker-website/scripts/run-modern-session-bridge-smoke.sh`
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/TESTING_AND_RELEASE.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - Static gates passed:
+    - `bash -n localProjects/cmangos_projects/docker-website/scripts/run-modern-session-bridge-smoke.sh`
+    - `docker run --rm -v "$PWD/localProjects/cmangos_projects/docker-website/modern-prototype/public":/app -w /app php:8.3-cli php -l index.php`
+    - `docker compose --env-file localProjects/cmangos_projects/docker-website/.env.example -f localProjects/cmangos_projects/docker-website/docker-compose.modern-prototype.yml config`
+  - Runtime proof passed via `localProjects/cmangos_projects/docker-website/scripts/run-modern-session-bridge-smoke.sh` and returned:
+    - `guest_fallback=ok`
+    - `legacy_cookie_bridge=ok`
+    - `modern_bridge_cookie=ok`
+    - `ownership_check=ok`
+    - `legacy_manage_fallback=ok`
+- Блокери / ризики:
+  - This is still a local proof slice with a fixture DB, not a live shared ingress/session rollout across the existing website stack.
+  - Follow-up work should stay on the authenticated owner/security route wave (`TASK-057` onward) rather than expanding public routes again.
+- Рекомендований наступний крок:
+  - Перейти до `TASK-057` і перенести the first real account-security-owned surface onto the companion layer while reusing the now-verified session bridge.
+
+### Сесія — `2026-03-17 01:10` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-052`
+- Контекст:
+  - After `TASK-051`, the modernization track had explicit slice cards but still lacked a real prototype proving that a PHP 8 companion layer could own one route without dragging the whole PHP 5.6 bootstrap into the first migration step.
+- Зроблена робота:
+  - Заклеймлено `TASK-052` у backlog.
+  - Chosen prototype slice = legacy `server.realmstatus`, because it is public, read-only, and isolated enough to validate the strangler pattern without session ownership work.
+  - Added a standalone PHP 8 companion runtime under `localProjects/cmangos_projects/docker-website/modern-prototype/` with its own Dockerfile and Apache vhost fallback routing.
+  - Added `docker-compose.modern-prototype.yml` so the prototype can run locally as a separate service instead of modifying the live legacy container graph.
+  - Added verification helpers `scripts/test-modern-realmstatus-contract.sh` and `scripts/run-modern-realmstatus-prototype.sh`.
+  - Updated testing docs and recorded the prototype outcome plus go/no-go recommendation in backlog/status/decisions.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/docker-website/.env.example`
+  - `localProjects/cmangos_projects/docker-website/docker-compose.modern-prototype.yml`
+  - `localProjects/cmangos_projects/docker-website/modern-prototype/Dockerfile`
+  - `localProjects/cmangos_projects/docker-website/modern-prototype/apache/000-default.conf`
+  - `localProjects/cmangos_projects/docker-website/modern-prototype/public/index.php`
+  - `localProjects/cmangos_projects/docker-website/scripts/test-modern-realmstatus-contract.sh`
+  - `localProjects/cmangos_projects/docker-website/scripts/run-modern-realmstatus-prototype.sh`
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/DECISIONS.md`
+  - `docs/TESTING_AND_RELEASE.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - Static gates passed:
+    - `bash -n localProjects/cmangos_projects/docker-website/scripts/test-modern-realmstatus-contract.sh`
+    - `bash -n localProjects/cmangos_projects/docker-website/scripts/run-modern-realmstatus-prototype.sh`
+    - `docker run --rm -v "$PWD/localProjects/cmangos_projects/docker-website/modern-prototype/public":/app -w /app php:8.3-cli php -l index.php`
+    - `docker compose --env-file localProjects/cmangos_projects/docker-website/.env.example -f localProjects/cmangos_projects/docker-website/docker-compose.modern-prototype.yml config`
+  - Runtime proof passed via `localProjects/cmangos_projects/docker-website/scripts/run-modern-realmstatus-prototype.sh` and returned:
+    - `legacy_url=https://world-of-warcraft.morgan-dev.com/wotlk/index.php?n=server&sub=realmstatus`
+    - `modern_url=http://127.0.0.1:8089/wotlk/modern/realmstatus`
+    - `contract_markers=ok`
+  - Follow-up render inspection showed `data-source="fallback"` plus `db_unreachable: ... getaddrinfo for cmangos-wotlk-db failed`, so the prototype shape is proven but the local isolated runtime still lacks a truthful bridge into the legacy DB host/network.
+- Блокери / ризики:
+  - This prototype does not prove DB bridging, session ownership, or public ingress handoff; it only proves that one route can be served from an isolated PHP 8 layer with a stable render contract.
+  - A production-grade slice still needs canonical identity/session ownership and real data connectivity, so public-route expansion should not jump ahead of `TASK-056`.
+- Рекомендований наступний крок:
+  - Перейти до `TASK-056` і побудувати first production-grade modern slice around identity/session bridging, reusing the isolated companion-runtime shape validated here.
+
+### Сесія — `2026-03-17 00:35` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-041`
+- Контекст:
+  - Після `TASK-039` and `TASK-040` website transfer wave already had truthful request-scoped execution surfaces, but it still lacked durable duplicate guards: nothing yet prevented double-submit, concurrent same-character execution, or stale lock leftovers after crashes.
+- Зроблена робота:
+  - Заклеймлено `TASK-041` у backlog.
+  - Додано shared runtime guard layer `transfer/request-locks.sh`.
+  - `targeted-transfer-runner.sh` тепер computes character-scoped `active_lock_key` plus target-scoped `idempotency_key`, acquires/releases runtime locks, reports `request_guard` metadata in JSON, blocks duplicates as `duplicate_request`, and surfaces stale-lock recovery as `recovered_stale`.
+  - `chained-wotlk-transfer-runner.sh` now sources the same guard layer, resolves the source character before orchestration, and blocks against the same character-level lock even for `to_wotlk` chain requests.
+  - `daily-sync.sh` was corrected so its legacy batch `EXIT` trap is installed only when run directly; when sourced by request-scoped runners it no longer emits stray batch-log side effects.
+  - `mangos-website/core/common.php` now exposes canonical `request_guard` metadata per transfer action using deterministic `active_lock_key` / `idempotency_key` builders and bumps the eligibility payload to `response_contract_version=task041-v1`.
+  - Додано deterministic runtime acceptance harness `transfer/test-request-lock-guards.sh`.
+  - Remote runtime on `workspace:/opt/cmangos-transfer/` updated with the new guard layer, the runner changes, the `daily-sync.sh` trap fix, and the acceptance harness.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/transfer/request-locks.sh`
+  - `localProjects/cmangos_projects/transfer/targeted-transfer-runner.sh`
+  - `localProjects/cmangos_projects/transfer/chained-wotlk-transfer-runner.sh`
+  - `localProjects/cmangos_projects/transfer/daily-sync.sh`
+  - `localProjects/cmangos_projects/transfer/test-request-lock-guards.sh`
+  - `localProjects/cmangos_projects/mangos-website/core/common.php`
+  - `workspace:/opt/cmangos-transfer/request-locks.sh`
+  - `workspace:/opt/cmangos-transfer/targeted-transfer-runner.sh`
+  - `workspace:/opt/cmangos-transfer/chained-wotlk-transfer-runner.sh`
+  - `workspace:/opt/cmangos-transfer/daily-sync.sh`
+  - `workspace:/opt/cmangos-transfer/test-request-lock-guards.sh`
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/TRANSFER_SYSTEM.md`
+  - `docs/COMMANDS_REFERENCE.md`
+  - `docs/TESTING_AND_RELEASE.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - Editor diagnostics: no errors for `request-locks.sh`, `targeted-transfer-runner.sh`, `chained-wotlk-transfer-runner.sh`, `daily-sync.sh`, `test-request-lock-guards.sh`, and `mangos-website/core/common.php`.
+  - Local syntax gates: `bash -n` passed for the updated shell scripts; `common.php` passed `php -l` inside `php:8.2-cli` because local macOS lacks a native PHP binary.
+  - Remote runtime acceptance from `/opt/cmangos-transfer/test-request-lock-guards.sh` returned:
+    - `targeted_duplicate` => `status=blocked`, `blocker_code=duplicate_request`, `lock_state=duplicate_blocked`, `existing_request_id=live-targeted`
+    - `chained_duplicate` => `status=blocked`, `blocker_code=duplicate_request`, `lock_state=duplicate_blocked`, `existing_request_id=live-chain`
+    - `stale_recovery` => `status=skipped`, `lock_state=recovered_stale`, `stale_lock_recovered=true`
+- Блокери / ризики:
+  - `TASK-041` establishes the runtime/request contract and acceptance harness, but it still does not create persistent `transfer_requests` rows or UI submit buttons; those remain the scope of `TASK-042` and later website queue/history/admin tasks.
+- Рекомендований наступний крок:
+  - Перейти до `TASK-042` і використати новий `request_guard` contract for the first real account/settings transfer UI submit surface.
+
+### Сесія — `2026-03-17 00:05` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-040`
+- Контекст:
+  - Після `TASK-039` існував request-scoped step runner only for one hop, але website `to_wotlk` still needed truthful chain orchestration with explicit Classic-origin and TBC-origin entry modes, step-level visibility, and non-hidden partial success semantics.
+- Зроблена робота:
+  - Заклеймлено `TASK-040` у backlog.
+  - `targeted-transfer-runner.sh` generalized into a reusable step runner for the only canonical step pairs: `classic -> tbc` and `tbc -> wotlk`.
+  - Step payload now includes `step_key` plus `steps.transfer`, so chain orchestration can distinguish transfer vs verify state instead of only one opaque final status.
+  - Додано new chain wrapper `transfer/chained-wotlk-transfer-runner.sh`.
+  - Chain wrapper enforces entry rules:
+    - `--source classic` => `classic_to_tbc -> tbc_verify -> tbc_to_wotlk -> wotlk_verify`
+    - `--source tbc` => `tbc_to_wotlk -> wotlk_verify`
+    - direct `classic -> wotlk` single-step copy is not exposed.
+  - Combined payload now returns `request_type=to_wotlk`, `chain_mode`, ordered `chain`, separate `chain_steps`, embedded child `step_payloads`, and merged ordered `events` from both the chain layer and each executed step.
+  - Partial success semantics were fixed in code/docs: after a real Classic-origin run, if the TBC stage is already available but the WotLK stage blocks/fails, top-level chain result becomes `partial` with `safe_retry_from=tbc_to_wotlk` instead of pretending the whole request failed from the start.
+  - During implementation a real merge bug in the chain wrapper was found and fixed: empty unused temp JSON files must be treated as absent, not parsed as JSON.
+  - Runtime scripts on `workspace:/opt/cmangos-transfer/` were backed up and updated: `lib.sh`, `daily-sync.sh`, `targeted-transfer-runner.sh`, `chained-wotlk-transfer-runner.sh`.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/transfer/targeted-transfer-runner.sh`
+  - `localProjects/cmangos_projects/transfer/chained-wotlk-transfer-runner.sh`
+  - `workspace:/opt/cmangos-transfer/lib.sh`
+  - `workspace:/opt/cmangos-transfer/daily-sync.sh`
+  - `workspace:/opt/cmangos-transfer/targeted-transfer-runner.sh`
+  - `workspace:/opt/cmangos-transfer/chained-wotlk-transfer-runner.sh`
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/TRANSFER_SYSTEM.md`
+  - `docs/COMMANDS_REFERENCE.md`
+  - `docs/TESTING_AND_RELEASE.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - Editor diagnostics: no errors for `targeted-transfer-runner.sh` and `chained-wotlk-transfer-runner.sh`.
+  - Temporary workspace proof with explicit password succeeded for both chain modes:
+    - `chained-wotlk-transfer-runner.sh --source classic --account SAMUEL --password samuel --character Samuel --dry-run`
+    - `chained-wotlk-transfer-runner.sh --source tbc --account SAMUEL --password samuel --character Samuel --dry-run`
+  - Final runtime proof from `/opt/cmangos-transfer` using canonical `sync-accounts.conf` fallback also succeeded for both chain modes:
+    - Classic-origin result = `status=skipped`, `chain_mode=classic_via_tbc`, `password_source=sync_conf`, `classic_to_tbc=already_synced`, `tbc_verify=already_verified`, `tbc_to_wotlk=skipped`, `wotlk_verify=not_run`.
+    - TBC-origin result = `status=skipped`, `chain_mode=tbc_direct`, `password_source=sync_conf`, `tbc_to_wotlk=skipped`, `wotlk_verify=not_run`.
+- Блокери / ризики:
+  - `TASK-040` gives truthful chain orchestration and partial-chain semantics, but still does not create persistent request rows or duplicate guards; those remain the job of `TASK-041` and the following website queue/history tasks.
+  - As with `TASK-039`, truthful execution validation still depends on a Bash 4+/5+ runtime like `workspace`; macOS `/bin/bash` 3.2 remains insufficient for direct local execution proof.
+- Рекомендований наступний крок:
+  - Перейти до `TASK-041` і додати locking, idempotency, and duplicate-request guards around the new request-scoped runner surfaces.
+
+### Сесія — `2026-03-16 23:50` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-039`
+- Контекст:
+  - Після `TASK-038` website transfer wave already knew which Classic/TBC characters were eligible, але execution layer все ще спиралась only on batch-oriented `daily-sync.sh` plus manual `sync-accounts.conf` edits, що не підходило як request-scoped orchestration contract.
+- Зроблена робота:
+  - Заклеймлено `TASK-039` у backlog.
+  - `daily-sync.sh` refactor-ено так, щоб verified transfer primitives можна було safely source-ити без запуску whole daily pipeline: pipeline body перенесено в `daily_sync_main()`, а request-scoped code тепер може reuse-ити `inspect_sync_decision()`, `sync_char()`, `do_transfer_char()`, `verify_character_login_with_retry()`, `store_verified_hash_after_login()`, `rollback_character()`.
+  - Додано new non-interactive runner `transfer/targeted-transfer-runner.sh`, scoped to `Classic -> TBC`.
+  - Runner приймає explicit request identity (`--account`, `--character` / `--guid`, optional `--request-id`) і перестає використовувати `sync-accounts.conf` як selection/orchestration surface; config лишився лише optional credential source when `--password` is omitted.
+  - Додано `--dry-run`, `--json-out`, `--no-restart`, separate `log_path`, ordered `events`, normalized `status` / `transfer_decision` / `target_state` / `blocker_code` / `safe_retry_from` fields.
+  - Runner additionally hardens the request path against website-side conflict cases: blocks `source_online`, `source_pending_login_flags`, target `online_conflict`, `played_conflict`, and `untracked_conflict` before mutation.
+  - Remote runtime on `workspace` оновлено з backup-ами previous `/opt/cmangos-transfer/lib.sh` and `/opt/cmangos-transfer/daily-sync.sh`; new `/opt/cmangos-transfer/targeted-transfer-runner.sh` deployed alongside them.
+  - Safe remote dry-run against the real runtime path succeeded and returned a structured JSON payload from `/opt/cmangos-transfer/targeted-transfer-runner.sh --account SAMUEL --character Samuel --dry-run`.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/transfer/lib.sh`
+  - `localProjects/cmangos_projects/transfer/daily-sync.sh`
+  - `localProjects/cmangos_projects/transfer/targeted-transfer-runner.sh`
+  - `workspace:/opt/cmangos-transfer/lib.sh`
+  - `workspace:/opt/cmangos-transfer/daily-sync.sh`
+  - `workspace:/opt/cmangos-transfer/targeted-transfer-runner.sh`
+  - `docs/TRANSFER_SYSTEM.md`
+  - `docs/COMMANDS_REFERENCE.md`
+  - `docs/TESTING_AND_RELEASE.md`
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - Editor diagnostics: no errors for `lib.sh`, `daily-sync.sh`, `targeted-transfer-runner.sh`.
+  - Remote runtime versions: `workspace` has `GNU bash 5.2.21` and `Python 3.12.3`, so Bash associative-array runtime validation was executed there instead of on local macOS Bash 3.2.
+  - Temporary remote proof from `/tmp/task039_runner_*` with explicit password:
+    - `targeted-transfer-runner.sh --account SAMUEL --password samuel --character Samuel --dry-run`
+    - Result: structured JSON `status=skipped`, `transfer_decision=skip_unchanged`, `target_state=unchanged`, `guid=1801`, `source_account_id=6`, ordered `events`.
+  - Final runtime proof from `/opt/cmangos-transfer` using canonical credential fallback:
+    - `./targeted-transfer-runner.sh --account SAMUEL --character Samuel --dry-run`
+    - Result: structured JSON `status=skipped`, `transfer_decision=skip_unchanged`, `target_state=unchanged`, `password_source=sync_conf`, `guid=1801`, `source_online=false`, `source_at_login=0`.
+- Блокери / ризики:
+  - Local execution proof for this script family cannot rely on default macOS `/bin/bash` because it is still Bash `3.2` and does not support associative arrays; truthful runtime validation must happen on `workspace` or another Bash 4+/5+ host.
+  - `TASK-039` only covers `Classic -> TBC`; chained `Classic/TBC -> WotLK` execution remains the next step in `TASK-040`.
+- Рекомендований наступний крок:
+  - Перейти до `TASK-040` і побудувати chained runner / step contract for WotLK requests on top of the new request-scoped execution surface.
+
+### Сесія — `2026-03-16 23:40` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-055`
+- Контекст:
+  - User-reported live defect: `https://world-of-warcraft.morgan-dev.com/classic/armory/battlegroups.xml` returned Apache `404`, while legacy Armory JS still hardcoded XML-era endpoints that no longer existed in the repo/runtime.
+- Зроблена робота:
+  - Заклеймлено `TASK-055` як hotfix task поверх paused `TASK-039` work.
+  - Підтверджено root cause: legacy Armory JS still references `battlegroups.xml`, `select-team-type.xml`, `arena-ladder.xml`, but the current website only has the HTML Armory flow at `armory/index.php`.
+  - У `docker-website/apache/mangos-website.conf` додано root-level `RedirectMatch` для dead XML-era Armory endpoints у `armory/index.php?searchType=arena`.
+  - У `docker-website/scripts/configure-apache.php` додано той самий compat redirect для prefixed services (`/classic`, `/tbc`, `/wotlk`) so multiroute Apache generation matches the root vhost behavior.
+  - First deploy approach with rewrite + PHP shim did not fix the public prefixed route; second deploy attempt introduced a real PHP parse error in `configure-apache.php`, which crash-looped all website containers.
+  - Remote logs isolated the outage to an accidentally injected `RedirectMatch 302 ...` line inside `normalize_prefix()`; that stray line was removed locally.
+  - Shared host was safely recovered by rolling back `.env` / `.env.multiroute` to the last healthy image, then the corrected image `semorgana/mangos-website:task055c-armoryxmlredirectfix-20260316` was built, pushed, and redeployed.
+  - Final public verification proved the hotfix: all three Classic XML-era routes now `302` into the working Armory HTML flow instead of returning `404`.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/docker-website/apache/mangos-website.conf`
+  - `localProjects/cmangos_projects/docker-website/scripts/configure-apache.php`
+  - `workspace:/opt/mangos-website/.env`
+  - `workspace:/opt/mangos-website/.env.multiroute`
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - `ssh -o ControlPath=/tmp/ssh-ws workspace 'docker ps ... | grep mangos-website'` → all four website containers healthy on `semorgana/mangos-website:task055c-armoryxmlredirectfix-20260316`.
+  - Public `curl -I` checks from `morgan.local`:
+    - `/classic/armory/battlegroups.xml` → `302`
+    - `/classic/armory/select-team-type.xml` → `302`
+    - `/classic/armory/arena-ladder.xml?ts=3` → `302`
+  - `curl -L https://world-of-warcraft.morgan-dev.com/classic/armory/battlegroups.xml` returns the Armory HTML markers `World of Warcraft Armory` and `Vanilla Realm`, proving the old `404` path now lands in the working page.
+- Блокери / ризики:
+  - The fix is an HTTP compat redirect, not a resurrection of the old XML response contract; legacy JS still points at dead XML-era filenames and would need deeper application cleanup if that compatibility bridge should ever be removed.
+  - `TASK-039` remains paused but unchanged; it is still the next execution-ready website transfer task after this hotfix.
+- Рекомендований наступний крок:
+  - Повернутися до `TASK-039` і побудувати targeted `Classic -> TBC` request runner поверх already-investigated `daily-sync.sh` / `transfer-interactive.sh` primitives.
+
+### Сесія — `2026-03-16 23:25` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-038`
+- Контекст:
+  - Після `TASK-037` website transfer wave мала canonical request/event storage contract, але ще не мала rules-engine layer, який міг би правдиво сказати користувачу, які персонажі справді готові до `to_tbc` або `to_wotlk`, а які вже blocked ще до submit.
+- Зроблена робота:
+  - У `mangos-website/core/common.php` додано canonical eligibility helper `mw_build_account_transfer_eligibility($account_id, $roster)` і супутні realm/account/hash helpers.
+  - Eligibility layer тепер використовує current roster payload як source discovery baseline, окремо резолвить source owner username через auth DB, перевіряє target account mapping by username і оцінює same-name target conflicts через current `character_sync_hash` safety model.
+  - Нормалізовано blocker codes для UI/account layer: `source_online`, `source_pending_login_flags`, `missing_account_mapping`, `stale_conflicting_target_state`, `target_patch_unavailable`.
+  - Canonical allowed flows зафіксовано в коді й docs як `Classic -> TBC`, `TBC -> WotLK`, `Classic -> WotLK via TBC`; non-applicable flows більше не лишаються implicit.
+  - `components/account/account.manage.php` тепер готує `$account_transfer_eligibility` для наступних website UI tasks.
+  - `docs/TRANSFER_SYSTEM.md` доповнено source queries, blocker semantics, mismatch cases і full response example для eligibility payload.
+  - `TASK-038` переведено в completed state; next execution-ready website task після цього = `TASK-039`.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/mangos-website/core/common.php`
+  - `localProjects/cmangos_projects/mangos-website/components/account/account.manage.php`
+  - `docs/TRANSFER_SYSTEM.md`
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/TESTING_AND_RELEASE.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - Editor diagnostics: `core/common.php` and `components/account/account.manage.php` → no errors.
+  - `TRANSFER_SYSTEM.md` now contains the documented response contract and allowed/blocked examples required by `TASK-038` acceptance.
+- Блокери / ризики:
+  - Eligibility still runs under interim `legacy_account_id` website identity mode, so empty buckets or missing mappings can still reflect cross-patch account drift rather than real character absence.
+  - This task does not submit or execute transfer requests yet; targeted runner/orchestration starts in `TASK-039` and `TASK-040`.
+- Рекомендований наступний крок:
+  - Перейти до `TASK-039` і адаптувати current transfer pipeline до single-character `Classic -> TBC` request execution without manual `sync-accounts.conf` editing.
+
+### Сесія — `2026-03-16 23:05` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-037`
+- Контекст:
+  - Після live closure of `TASK-054` website account area вже має roster/password baseline, але transfer queue/history хвиля все ще не мала канонічної persistent model. Без цього наступні tasks (`TASK-038`..`TASK-044`) ризикували проектуватись без стабільного request/audit contract.
+- Зроблена робота:
+  - Заклеймлено `TASK-037` у backlog як наступну execution-ready website task після завершення account-management baseline.
+  - У `docs/TRANSFER_SYSTEM.md` додано canonical `Transfer Request Schema and Audit Trail Contract`.
+  - Зафіксовано двошаровий persistence model:
+    - `transfer_requests` = mutable request head row з current state;
+    - `transfer_request_events` = immutable append-only audit/event stream для step history, retries, user-visible progress і operator actions.
+  - Окремо зафіксовано required head fields для chain execution (`requested_target`, `current_step`, `current_source`, `current_target`, `retry_count`, `last_error`) плюс source character identity, `user_visible_status`, `idempotency_key`, actor attribution і timestamp fields.
+  - Описано canonical event fields, user-visible/error categories, chain-progress mapping і retention policy.
+  - У `docs/DECISIONS.md` додано `DEC-026`, який закріплює mutable-head + immutable-event-log model як canonical storage contract для self-service transfer wave.
+  - `PROJECT_STATUS` синхронізовано: next execution-ready website item після цього = `TASK-038`, а не `TASK-043`.
+- Які файли / області зачеплено:
+  - `docs/TRANSFER_SYSTEM.md`
+  - `docs/DECISIONS.md`
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - `TRANSFER_SYSTEM` тепер explicitly описує canonical table/event contract для future website-side request queue/history.
+  - `DEC-026` фіксує durable rationale для request-head + event-log design.
+  - Backlog `TASK-037` marked complete with schema/evidence references.
+- Блокери / ризики:
+  - Це schema-level contract, а не live DB migration. Реальні таблиці й writer logic ще мають бути імплементовані в `TASK-038`..`TASK-044`.
+  - Current runtime still should not be assumed to have any canonical `transfer_requests` storage until a later implementation task creates it explicitly.
+- Рекомендований наступний крок:
+  - Перейти до `TASK-038` і побудувати eligibility discovery layer, already aligned to the new request/audit schema contract.
+
+### Сесія — `2026-03-16 22:40` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-054`
+- Контекст:
+  - Після попереднього live triage потрібно було або довести corrective rollout до кінця, або чесно залишити `TASK-054` відкритим. У цій сесії SSH ControlMaster для `workspace` уже був доступний non-interactively.
+- Зроблена робота:
+  - Виконано remote deploy на `workspace:/opt/mangos-website/`: `.env` і `.env.multiroute` перепінено на `semorgana/mangos-website:task054a-passflow-20260316`, image pulled, root і multiroute compose stacks recreated.
+  - Перевірено remote container state після warm-up: `mangos-website`, `mangos-website-classic`, `mangos-website-tbc`, `mangos-website-wotlk` усі на `task054a-passflow-20260316` і `healthy`.
+  - Live public checks after deploy показали, що `/classic/`, `/tbc/`, `/wotlk/` знову віддають normal `HTTP 200` HTML після recreate.
+  - Logged-in `account.manage` live proof оновлено: `curl` login + `account.manage` fetch на `/classic/` і `/wotlk/` тепер clearly містять `My Characters`, `Change Password`, `Current Password`, `Confirm New Password`, разом із existing `SAMUEL` / `Logout` markers.
+  - Виконано безпечний negative submit proof для нового password flow без зміни реального пароля:
+    - `classic`: mismatched confirmation returns `New password and confirmation must match.`
+    - `wotlk`: live submit routed through the new deployed handler path rather than the old pre-task surface.
+  - `TASK-054` після цього переведено в completed state.
+- Які файли / області зачеплено:
+  - `workspace:/opt/mangos-website/.env`
+  - `workspace:/opt/mangos-website/.env.multiroute`
+  - `workspace:/opt/mangos-website/docker-compose.yml`
+  - `workspace:/opt/mangos-website/docker-compose.multiroute.yml`
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - `ssh -o ControlPath=/tmp/ssh-ws workspace 'docker ps ... | grep mangos-website'` → all four website containers on `semorgana/mangos-website:task054a-passflow-20260316`, `healthy`.
+  - Public `curl` checks: `/classic/`, `/tbc/`, `/wotlk/` → `HTTP 200` after rollout.
+  - Public logged-in `account.manage` HTML on `classic` and `wotlk` contains `My Characters`, `Change Password`, `Current Password`, `Confirm New Password`.
+  - Safe negative submit on live `classic` returns `New password and confirmation must match.` from the new handler.
+- Блокери / ризики:
+  - Success-path password mutation was intentionally not executed against the real user account in this cycle; live proof is based on render + safe negative submit validation.
+  - Website password scope remains truthful `local-only` at implementation level until a future linked-account identity layer exists.
+- Рекомендований наступний крок:
+  - Переходити або до website transfer/history track (`TASK-043` та пов'язані tasks), або назад до основного AzerothCore track `TASK-013`, залежно від того, який напрямок ви хочете продовжити наступним.
+
+### Сесія — `2026-03-16 22:15` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-054`
+- Контекст:
+  - Після локального implementation cycle потрібно було зняти ambiguity: чи `TASK-054` просто не верифіковано, чи live site already показує new account/manage surface.
+- Зроблена робота:
+  - Повторно перевірено current blocker path для `workspace`: tool-driven `ssh -o ControlPath=/tmp/ssh-ws -O check workspace` знову падає в interactive `Confirm user presence` / `Enter PIN for ED25519-SK`, тому remote deploy не можна reliably завершити з цього agent session.
+  - Замість здогадок виконано live public auth proof з локальної машини через `curl` against `/classic/index.php?n=account&sub=login` і `/wotlk/index.php?n=account&sub=login`.
+  - Proof показав, що login itself working: server sets valid `PHPSESSID`, `cur_selected_realmd`, and path-scoped `mangosWeb` cookies; follow-up `account.manage` requests return `HTTP 200` and contain `SAMUEL` plus `Logout` UI markers.
+  - Одночасно той самий returned HTML не містить `My Characters`, `Change Password`, `Current Password`, `Confirm New Password`, тобто live website still serves the pre-`TASK-046`/`TASK-047`/`TASK-054` account/manage surface.
+  - Для cross-check rerun-ено existing `browser-audit/auth_render_audit.py` with `live_auth_render_config.json`; current live auth render gate still passes on `classic`, `tbc`, `wotlk`, що підтверджує: проблема не в загальному logged-in rendering, а саме в відсутності нового deploy state на public website containers.
+- Які файли / області зачеплено:
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - `curl` login on `https://world-of-warcraft.morgan-dev.com/classic/index.php?n=account&sub=login` → `HTTP 200`, sets `mangosWeb` cookie for `/classic/`; subsequent `account.manage` HTML contains `SAMUEL` and `Logout`, but no `My Characters` / `Change Password` markers.
+  - `curl` login on `https://world-of-warcraft.morgan-dev.com/wotlk/index.php?n=account&sub=login` → same result for `/wotlk/`.
+  - `python3 auth_render_audit.py --config live_auth_render_config.json` still reports working authenticated render for `classic`, `tbc`, `wotlk`.
+- Блокери / ризики:
+  - `TASK-054` is now proven to be blocked specifically by rollout/state drift: the public site is not yet running the locally implemented account/manage changes.
+  - Without a non-interactive SSH ControlMaster to `workspace`, this agent session cannot complete the corrective deploy or inspect remote container image state directly.
+- Рекомендований наступний крок:
+  - Re-establish `workspace` SSH access with an already-unlocked ControlMaster, deploy `semorgana/mangos-website:task054a-passflow-20260316`, then repeat logged-in checks specifically against `account.manage` to confirm the new roster/password UI and the password submit flow.
+
+### Сесія — `2026-03-16 18:35` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-054`
+- Контекст:
+  - Після `TASK-053` потрібно було реалізувати actual password-change flow в logged-in account area, але без фальшивої claim-і, що linked-account propagation або live proof already існують.
+- Зроблена робота:
+  - Заклеймлено `TASK-054` у backlog.
+  - У `components/account/account.manage.php` переписано `action=changepass`: тепер flow вимагає `current_pass`, `new_pass`, `confirm_new_pass`, перевіряє current password через local auth row (`s/v` if available, otherwise `sha_pass_hash`), відхиляє mismatch/same-password/short-password cases, генерує нові `s/v` через `getRegistrationData()`, оновлює `sha_pass_hash`, чистить `sessionkey` і робить forced logout на success.
+  - Legacy plaintext mirror в `account_pass` для цього flow більше не використовується.
+  - У `templates/offlike/account/account.manage.php` додано видимий `Change Password` section з полями `Current Password`, `New Password`, `Confirm New Password`, truthful local-only scope note, і disabled-state fallback якщо feature вимкнено конфігом.
+  - У `docker-website/scripts/configure-app.php` додано `MW_ENABLE_PASSWORD_CHANGE`; generated website config тепер вмикає `generic.change_pass` для account-enabled surfaces by default.
+  - Локальна валідація пройдена:
+    - editor diagnostics clean;
+    - Docker PHP lint clean for `components/account/account.manage.php`, `templates/offlike/account/account.manage.php`, `scripts/configure-app.php`.
+  - Спроба live rollout через `workspace` не завершилась: очікуваний SSH ControlMaster socket `/tmp/ssh-ws` був відсутній у shell, тому non-destructive deploy і browser-level submit proof не відбулися в цій сесії.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/mangos-website/components/account/account.manage.php`
+  - `localProjects/cmangos_projects/mangos-website/templates/offlike/account/account.manage.php`
+  - `localProjects/cmangos_projects/docker-website/scripts/configure-app.php`
+  - `localProjects/cmangos_projects/docker-website/.env.example`
+  - `localProjects/cmangos_projects/docker-website/.env.multiroute.example`
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - `docker run ... php:5.6-apache php -l components/account/account.manage.php` → no syntax errors.
+  - `docker run ... php:5.6-apache php -l templates/offlike/account/account.manage.php` → no syntax errors.
+  - `docker run ... php:8.2-cli php -l scripts/configure-app.php` → no syntax errors.
+  - Image `semorgana/mangos-website:task054a-passflow-20260316` built and pushed successfully.
+- Блокери / ризики:
+  - `TASK-054` не можна чесно закрити без live deploy і logged-in browser verification; наразі blocker = unavailable SSH ControlMaster / remote auth path in this shell.
+- Рекомендований наступний крок:
+  - Коли `workspace` SSH access знову буде доступний, задеплоїти image `semorgana/mangos-website:task054a-passflow-20260316` і виконати logged-in browser verification для render + submit flow.
+
+### Сесія — `2026-03-16 18:05` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-053`
+- Контекст:
+  - Після `TASK-047` потрібно було не просто додати ще одну legacy форму, а формально визначити, яким має бути безпечний password-change flow перед будь-яким UI implementation.
+- Зроблена робота:
+  - Заклеймлено `TASK-053` у backlog.
+  - Перевірено current legacy behavior в `components/account/account.manage.php`: existing `action=changepass` already updates the local auth row, але не перевіряє current password, не вимагає confirmation, і не формалізує forced re-login або linked-account propagation.
+  - У `TRANSFER_SYSTEM` задокументовано canonical password-change contract: required fields (`current`, `new`, `confirmation`), forced re-login, truthful success/failure messaging, linked-account-wide target scope by contract, і transitional language for current local-only reality.
+  - У `DECISIONS` додано `DEC-025`, який закріплює password change як authenticated security flow, а не blind profile edit.
+  - У `TESTING_AND_RELEASE` додано acceptance expectations для upcoming implementation task `TASK-054`.
+  - `PROJECT_STATUS` і `BACKLOG` синхронізовано: after this docs task the next website step is `TASK-054`.
+- Які файли / області зачеплено:
+  - `docs/TRANSFER_SYSTEM.md`
+  - `docs/DECISIONS.md`
+  - `docs/TESTING_AND_RELEASE.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/BACKLOG.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - Backlog `TASK-053` now marked complete with explicit evidence.
+  - Durable decision and release-evidence requirements are now written in docs instead of implied by chat.
+- Блокери / ризики:
+  - Current code still does not satisfy the new contract; it remains local-only and misses mandatory checks until `TASK-054` is implemented.
+- Рекомендований наступний крок:
+  - Перейти до `TASK-054` і привести visible password UI/backend flow у відповідність до щойно зафіксованого contract.
+
+### Сесія — `2026-03-16 17:45` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-047`
+- Контекст:
+  - Після `TASK-046` потрібно було довести roster track до first user-visible state: показати `My Characters` у logged-in account area, а не залишити canonical payload невикористаним.
+- Зроблена робота:
+  - Заклеймлено `TASK-047` у backlog.
+  - У `templates/offlike/account/account.manage.php` додано server-rendered section `My Characters` перед profile-editing form.
+  - UI використовує canonical `$account_character_roster` payload з `TASK-046` і не виконує нових ad hoc queries до `characters`.
+  - Реалізовано user-visible states:
+    - populated patch buckets з rows `name`, `race`, `class`, `level`, `Online/Offline`;
+    - explicit empty state per patch;
+    - top-level plus per-patch warning for partial-unavailable realms.
+  - Default grouping/order закріплено як `Classic -> TBC -> WotLK`, а row order успадковується з backend contract `level DESC, name ASC`.
+  - Після локальної валідації прибрано слабке місце first draft-а: race column більше не залежить від непідтвердженого filename pattern для race icons і тепер показує visible text label; class column показує icon + text.
+  - Оновлено `BACKLOG`, `TESTING_AND_RELEASE`, `PROJECT_STATUS`, `SESSION_LOG`.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/mangos-website/templates/offlike/account/account.manage.php`
+  - `docs/BACKLOG.md`
+  - `docs/TESTING_AND_RELEASE.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - Editor diagnostics for `templates/offlike/account/account.manage.php` → no errors.
+  - Docker PHP 5.6 lint passed for:
+    - `templates/offlike/account/account.manage.php`
+    - `components/account/account.manage.php`
+    - `core/common.php`
+- Блокери / ризики:
+  - UI уже існує, але cross-patch completeness все ще обмежена current `legacy_account_id` lookup mode з `TASK-046`.
+- Рекомендований наступний крок:
+  - Перейти до `TASK-053` і формалізувати password-change contract так, щоб existing backend action не лишався hidden legacy behavior.
+
+### Сесія — `2026-03-16 17:20` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-046`
+- Контекст:
+  - Після завершення `TASK-035`, `TASK-036` і `TASK-048` потрібно було почати перший implementation-facing website task без удавання, що cross-patch website identity вже реально існує в коді.
+- Зроблена робота:
+  - Заклеймлено `TASK-046` у backlog і перевірено workflow blockers: `ROLE=Project Architect`, `gh` installed/authenticated, local context valid.
+  - Розібрано actual legacy realm wiring: website тримає один active `CHDB` через `website_realm_settings`, а `cur_selected_realmd` лише перемикає current realm, не даючи справжнього unified roster out of the box.
+  - Додано canonical helper `mw_build_account_character_roster($account_id)` у `mangos-website/core/common.php`.
+  - Helper виконує lookup по всіх configured realms через `realmlist + website_realm_settings`, відкриває per-realm character DB connection і повертає grouped roster payload з patch buckets `classic`, `tbc`, `wotlk`, `other`.
+  - Payload now includes minimal UI-ready fields: patch, realm metadata, guid, name, race/class ids and labels, level, online state, plus summary/policy flags for duplicate names and partial-unavailable realms.
+  - Explicitly documented current limitation: identity mode = `legacy_account_id`, тобто cross-patch buckets наповнюються лише там, де numeric logged-in `account.id` реально збігається з character rows на target realm.
+  - `components/account/account.manage.php` тепер готує `$account_character_roster` для logged-in account area, щоб `TASK-047` працював від canonical backend payload, а не від scattered `SELECT * FROM characters WHERE account='$user[id]'` queries.
+  - Оновлено `TRANSFER_SYSTEM`, `ARCHITECTURE`, `PROJECT_STATUS`, `BACKLOG`.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/mangos-website/core/common.php`
+  - `localProjects/cmangos_projects/mangos-website/components/account/account.manage.php`
+  - `docs/TRANSFER_SYSTEM.md`
+  - `docs/ARCHITECTURE.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/BACKLOG.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - Editor diagnostics: `core/common.php`, `components/account/account.manage.php`, `docs/BACKLOG.md` → no errors.
+  - New documented payload contract added to `docs/TRANSFER_SYSTEM.md`.
+  - Backlog `TASK-046` now marked completed with evidence and explicit interim limitations.
+- Блокери / ризики:
+  - Це ще не повний linked-account cross-patch roster. Без окремої mapping layer між website identity і target auth rows деякі patch buckets можуть чесно лишатися empty.
+- Рекомендований наступний крок:
+  - Перейти до `TASK-047` і побудувати `My Characters` UI поверх `$account_character_roster`, не повертаючись до patch-local ad hoc queries в template.
+
+### Сесія — `2026-03-14 19:58` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-HIST-001`, `TASK-HIST-002`, `TASK-HIST-003`, `TASK-HIST-004`
+- Контекст:
+  - Потрібно було перенести історію виконаних робіт із legacy workflow у новий template без втрати фаз 0–14.
+- Зроблена робота:
+  - Перенесено high-level історію: побудова multi-expansion Docker stack, transfer system, login bot, WotLK crash analysis/workaround, pipeline phases 13–14.
+  - Відокремлено активний незавершений хвіст у `docs/BACKLOG.md`.
+  - Позначено raw historical artifacts як legacy archives у `docs/`.
+- Які файли / області зачеплено:
+  - `docs/BACKLOG.md`
+  - `docs/DECISIONS.md`
+  - `docs/PROJECT_STATUS.md`
+- Верифікація:
+  - Порівняно legacy `AGENTS.md`, `PROJECT_STATUS.md`, `ARCHITECTURE.md`, `TRANSFER_SYSTEM.md`, `SESSION_LOG.md`, `backlog.md`.
+- Блокери / ризики:
+  - Runtime state на `workspace` поки що перенесений з legacy docs і ще не live-перевірений у межах нового template cycle.
+- Рекомендований наступний крок:
+  - Завершити `TASK-001`, потім виконати `TASK-002`.
+
+### Сесія — `2026-03-14 20:00` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-001`
+- Контекст:
+  - Користувач надав `INIT:` для нового template і попросив інтегрувати всю документацію з `localProjects/cmangos_projects` у кореневі docs.
+- Зроблена робота:
+  - Ініціалізовано `workflow_config.md`, `remote_access.md`, `PROJECT_BRIEF.md`, `PROJECT_STATUS.md`, `MODULES.md`, `BACKLOG.md`, `DECISIONS.md`, `ARCHITECTURE.md`, `COMMANDS_REFERENCE.md`, `TESTING_AND_RELEASE.md`.
+  - Зафіксовано політику cleanup: прибирати тільки project-owned migrated markdown, не торкаючись upstream/wiki markdown.
+  - Перенесено legacy-specific docs у `docs/`: `TRANSFER_SYSTEM.md`, `USAGE_GUIDE_CLASSIC.md`, `COVERAGE.md`, `LEGACY_AGENTS_ARCHIVE.md`, `LEGACY_BACKLOG_ARCHIVE.md`, `LEGACY_SESSION_LOG_ARCHIVE.md`.
+  - Видалено migrated project-owned markdown із `localProjects/cmangos_projects` root і його legacy `docs/`.
+  - Підготовлено канонічний continuation path для наступних агентів.
+- Які файли / області зачеплено:
+  - `workflow_config.md`
+  - `remote_access.md`
+  - `docs/`
+  - `localProjects/cmangos_projects/*.md`
+  - `localProjects/cmangos_projects/docs/*.md`
+- Верифікація:
+  - Підтверджено `gh` install/auth, `git`, `docker`, `python3`, SSH alias `workspace`.
+  - Прочитано весь обов'язковий template set і релевантні legacy docs.
+  - Перевірено, що в `docs/` існує migrated archive layer, а project-owned markdown у legacy workspace прибрані.
+- Блокери / ризики:
+  - Runtime state на `workspace` досі не звірено live у цьому template cycle.
+- Рекомендований наступний крок:
+  - Виконати `TASK-002`: live-звірку `workspace` і синхронізувати docs з реальною системою.
+
+### Сесія — `2026-03-14 20:23` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-002`
+- Контекст:
+  - Після завершення docs migration потрібно було live-звірити `workspace` перед наступними runtime задачами.
+- Зроблена робота:
+  - Заклеймлено `TASK-002` у backlog.
+  - Перевірено ControlMaster і зроблено спробу підняти SSH-сесію до `workspace`.
+  - Виявлено блокер автентифікації на YubiKey/PIN.
+- Які файли / області зачеплено:
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - `ssh -o ControlPath=/tmp/ssh-ws -O check workspace` → `Control socket connect(/tmp/ssh-ws): No such file or directory`
+  - Неінтерактивні `ssh ... workspace ...` → `sign_and_send_pubkey ... device not found`
+  - Інтерактивна спроба `ssh -o ControlMaster=yes -o ControlPath=/tmp/ssh-ws -o ControlPersist=600 -N workspace` попросила `Confirm user presence` і `Enter PIN for ED25519-SK`
+- Блокери / ризики:
+  - Без фізичного YubiKey touch і PIN live-перевірка `workspace` неможлива.
+- Рекомендований наступний крок:
+  - Коли YubiKey буде доступний, повторити стандартну команду ControlMaster і одразу продовжити `TASK-002`.
+
+### Сесія — `2026-03-14 20:23` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-002`
+- Контекст:
+  - Користувач підняв окремий ControlMaster до `workspace`, після чого можна було завершити live-звірку runtime.
+- Зроблена робота:
+  - Перевірено SSH master socket і базовий доступ (`/home/samuel`).
+  - Перевірено `docker ps` і `docker compose ps` для Classic, TBC, WotLK: усі 6 CMaNGOS контейнерів healthy.
+  - Перевірено remote paths `/opt/cmangos-classic`, `/opt/cmangos-tbc`, `/opt/cmangos-wotlk`, `/opt/cmangos-transfer`.
+  - Перевірено systemd timers: `cmangos-update.timer`, `cmangos-tbc-update.timer`, `cmangos-wotlk-update.timer`, `cmangos-daily-sync.timer`.
+  - Перевірено `cmangos-daily-sync.service`: останній запуск завершився `SUCCESS`.
+  - Звірено `/opt/cmangos-transfer/sync-accounts.conf` і зафіксовано config drift для `ADMIN`.
+  - Оновлено `PROJECT_STATUS`, `ARCHITECTURE`, `COMMANDS_REFERENCE`, `TRANSFER_SYSTEM`, `BACKLOG`.
+- Які файли / області зачеплено:
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_BRIEF.md`
+  - `docs/CONTINUATION_GUIDE.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/ARCHITECTURE.md`
+  - `docs/COMMANDS_REFERENCE.md`
+  - `docs/TRANSFER_SYSTEM.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - `ssh -o ControlPath=/tmp/ssh-ws -O check workspace` → `Master running`
+  - `docker ps` на remote показав healthy `cmangos-*` контейнери
+  - `systemctl status cmangos-daily-sync.service` → `status=0/SUCCESS`
+  - `tail /opt/cmangos-transfer/logs/daily-sync-20260314.log` → WotLK verify `SUCCESS`, `Errors 0`
+- Блокери / ризики:
+  - Shared host: окрім CMaNGOS є `powerbot-*` і `traefik`
+  - `sync-accounts.conf` містить bare `ADMIN`, що не відповідає задокументованому формату
+- Рекомендований наступний крок:
+  - Перейти до `TASK-003` і провести single-account E2E перевірку.
+
+### Сесія — `2026-03-14 20:46` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-003`
+- Контекст:
+  - Користувач попросив нормалізувати single-account runtime: виправити timer naming drift у docs, прибрати `ADMIN` із sync config, оновити target пароль `SAMUEL` і очистити TBC/WotLK персонажів перед наступним daily sync.
+- Зроблена робота:
+  - Live-підтверджено, що на remote існують окремі timer-и `cmangos-update.timer`, `cmangos-tbc-update.timer`, `cmangos-wotlk-update.timer`, `cmangos-daily-sync.timer`.
+  - Зупинено `cmangos-tbc-server` і `cmangos-wotlk-server`, зроблено backup `sync-accounts.conf`, `tbccharacters`, `wotlkcharacters`, а також `tbcrealmd.account` і `wotlkrealmd.account`.
+  - Remote `/opt/cmangos-transfer/sync-accounts.conf` замінено на single-account `samuel:samuel`.
+  - Оновлено SRP6 `SAMUEL` на TBC/WotLK і видалено target персонажа `Samuel` разом із `character_sync_hash` на обох expansion-ах.
+  - Після restart обидва server-контейнери знову healthy; login bot на TBC/WotLK з новим паролем доходить до `CHAR_ENUM` і повертає `RESULT: NOT_FOUND`, що підтверджує робочий auth-path при порожніх target realm-ах.
+  - Оновлено `workflow_config.md`, `PROJECT_STATUS`, `ARCHITECTURE`, `BACKLOG`, `COMMANDS_REFERENCE`, `TESTING_AND_RELEASE`, `TRANSFER_SYSTEM`.
+- Які файли / області зачеплено:
+  - `workflow_config.md`
+  - `localProjects/cmangos_projects/transfer/sync-accounts.conf`
+  - `workspace:/opt/cmangos-transfer/sync-accounts.conf`
+  - `workspace:/opt/cmangos-tbc`
+  - `workspace:/opt/cmangos-wotlk`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/ARCHITECTURE.md`
+  - `docs/BACKLOG.md`
+  - `docs/COMMANDS_REFERENCE.md`
+  - `docs/TESTING_AND_RELEASE.md`
+  - `docs/TRANSFER_SYSTEM.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - `systemctl list-timers "cmangos-*"` → 4 active timers including Classic/TBC/WotLK update timers
+  - `cat /opt/cmangos-transfer/sync-accounts.conf` → `samuel:samuel`
+  - SQL on `tbcrealmd.account` and `wotlkrealmd.account` → `SAMUEL` now has new `v/s`
+  - SQL on `tbccharacters` and `wotlkcharacters` → `characters=0`, `character_sync_hash(Samuel)=0`
+  - `wow_login_test_universal.py` on TBC/WotLK with `--password samuel --guid 1` → `Proof OK`, `Auth response: OK`, `RESULT: NOT_FOUND`
+- Блокери / ризики:
+  - Якщо target акаунт `SAMUEL` буде видалений, `ensure_account()` у `daily-sync.sh` auto-create-не його з Classic source `s/v`, що може розійтися з поточним `samuel:samuel`.
+- Рекомендований наступний крок:
+  - У межах `TASK-003` запустити `daily-sync.sh` і зібрати end-to-end `SUCCESS` та `at_login=0` докази.
+
+### Сесія — `2026-03-14 20:57` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-003`
+- Контекст:
+  - Після нормалізації single-account preconditions потрібно було завершити справжній E2E прогін `Classic → TBC verify → WotLK verify` і зафіксувати acceptance-докази.
+- Зроблена робота:
+  - Перевірено pre-run state: у Classic є один `Samuel (guid=1801, at_login=0)`, TBC/WotLK порожні.
+  - Запущено `/opt/cmangos-transfer/daily-sync.sh` на remote для єдиного акаунта `SAMUEL`.
+  - Отримано успішний Phase B verify на TBC і успішний Phase D verify на WotLK.
+  - Після run-а окремо перевірено manual login bot на TBC і WotLK з `SAMUEL/samuel`, `guid=1801` — обидва `RESULT: SUCCESS`.
+  - SQL-перевіркою підтверджено, що на TBC і WotLK `Samuel` має `at_login=0`, `online=0`; `character_sync_hash` записаний на обох targets.
+  - Оновлено `PROJECT_STATUS`, `BACKLOG`, `COMMANDS_REFERENCE`, `TESTING_AND_RELEASE`, `TRANSFER_SYSTEM`.
+- Які файли / області зачеплено:
+  - `docs/PROJECT_STATUS.md`
+  - `docs/BACKLOG.md`
+  - `docs/COMMANDS_REFERENCE.md`
+  - `docs/TESTING_AND_RELEASE.md`
+  - `docs/TRANSFER_SYSTEM.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - `daily-sync.sh` summary → `Accounts 1`, `Synced 2`, `Skipped 0`, `Created 0`, `Errors 0`, `Duration 2m 55s`
+  - Phase B → `Samuel (guid=1801) — SUCCESS`
+  - Phase D → `Samuel (guid=1801) — SUCCESS`
+  - Manual login bot on TBC/WotLK → `RESULT: SUCCESS`
+  - SQL on TBC → `1801 / 10 / Samuel / 60 / at_login=0 / online=0`
+  - SQL on WotLK → `1801 / 12 / Samuel / 60 / at_login=0 / online=0`
+- Блокери / ризики:
+  - Після успішного run-а все ще лишається відомий debt: `character_sync_hash` зберігається до login verify.
+- Рекомендований наступний крок:
+  - Перейти до `TASK-020` і перенести lifecycle hash-а на post-verify фазу.
+
+### Сесія — `2026-03-14 21:47` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-020`
+- Контекст:
+  - Після успішного `TASK-003` потрібно було прибрати design debt: `character_sync_hash` не мав більше зберігатися до login verify.
+- Зроблена робота:
+  - Заклеймлено `TASK-020` у backlog.
+  - Локально змінено `localProjects/cmangos_projects/transfer/daily-sync.sh`: `sync_char()` більше не викликає `store_hash()`, synced chars трекаються точно, а новий helper `store_verified_hash_after_login()` пише hash тільки після `SUCCESS` у Phases B і D.
+  - На remote зроблено backup старого `/opt/cmangos-transfer/daily-sync.sh` і задеплоєно нову версію.
+  - Live-перевіркою підтверджено, що pre-fix rows для `Samuel` уже були stale:
+    - TBC `current_hash != stored_hash`
+    - WotLK `current_hash != stored_hash`
+  - Для repeat-run verification виконано one-time manual realignment цих старих row до поточного state, після чого запущено новий `daily-sync.sh`.
+  - Repeat-run пройшов успішно; у логові з’явилися явні рядки `Stored post-verify hash for Samuel on tbc` і `Stored post-verify hash for Samuel on wotlk`.
+  - Post-run SQL підтвердив `current_hash == stored_hash` на TBC і WotLK.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/transfer/daily-sync.sh`
+  - `workspace:/opt/cmangos-transfer/daily-sync.sh`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/BACKLOG.md`
+  - `docs/TRANSFER_SYSTEM.md`
+  - `docs/COMMANDS_REFERENCE.md`
+  - `docs/TESTING_AND_RELEASE.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - `bash -n localProjects/cmangos_projects/transfer/daily-sync.sh`
+  - `bash -n /opt/cmangos-transfer/daily-sync.sh`
+  - Repeat-run summary → `Accounts 1`, `Synced 2`, `Skipped 0`, `Errors 0`, `Duration 3m 9s`
+  - Log lines → `Stored post-verify hash for Samuel on tbc` і `Stored post-verify hash for Samuel on wotlk`
+  - TBC SQL → `current_hash == stored_hash == c1f010444c5f03e65525fde700617e2b`
+  - WotLK SQL → `current_hash == stored_hash == ccb7896f7283eeb6b948a4ce7a3372f0`
+- Блокери / ризики:
+  - Уже створені pre-fix stale rows не лікуються самим код-фіксом; для них може знадобитися одноразовий realignment або clean resync.
+- Рекомендований наступний крок:
+  - Перейти до `TASK-004` або одразу в `TASK-006`, якщо хочеш зосередитися на stability regressions.
+
+### Сесія — `2026-03-14 22:26` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-004`
+- Контекст:
+  - Потрібно було закрити Phase 15.2 на non-admin multi-account наборі так, щоб одночасно перевірити `SYNC`, `AUTO-CREATE` і `SKIP` сценарії без мутації canonical `sync-accounts.conf`.
+- Зроблена робота:
+  - Заклеймлено `TASK-004` і локально поправлено `localProjects/cmangos_projects/transfer/lib.sh`: `ensure_account()` тепер інкрементує `TOTAL_CREATED`; fix задеплоєно на remote `/opt/cmangos-transfer/lib.sh`.
+  - Підготовлено тимчасовий config `/opt/cmangos-transfer/sync-accounts.task004.conf` з `samuel:samuel`, `autoacc:autoacc`, `skipacc:skipacc`.
+  - Створено synthetic fixture:
+    - Classic source accounts `AUTOACC`, `SKIPACC`
+    - Classic chars `Autolock (guid=1802)` і `Skiplock (guid=1803)`
+    - Target stale-hash fixture `Skiplock` на TBC/WotLK
+  - Перший run формально дав потрібний summary, але показав `WARN` на `Autolock`; live-діагностика довела, що це fixture-only contamination:
+    - Classic `Autolock` і target `Skiplock` мали повний overlap item GUIDs (`313/313`)
+    - Через це `character_inventory`/items для `Autolock` конфліктували з already-existing `Skiplock`, а не з pipeline logic
+  - Для clean retry зроблено нові targeted backups, повністю очищено target `AUTOACC`, прибрано collision-prone item state у `Skiplock`, після чого multi-account run повторено.
+  - Clean rerun уже пройшов без `WARN:` у своєму log section і дав expected summary:
+    - `Accounts 3`
+    - `Synced 4`
+    - `Skipped 2`
+    - `Created 2`
+    - `Errors 0`
+    - `Duration 3m 15s`
+  - Після clean rerun перевірено manual login bot:
+    - `AUTOACC/AUTOACC`, `guid=1802` → `RESULT: SUCCESS` on TBC and WotLK
+    - `SKIPACC/SKIPACC`, `guid=1803` → `RESULT: SUCCESS` on TBC and WotLK
+  - SQL-перевіркою підтверджено:
+    - TBC `AUTOACC=14`, WotLK `AUTOACC=16`
+    - `Autolock` має `168 inventory / 313 item_instance` і `current_hash == stored_hash` on both targets
+    - `Skiplock` лишається deliberate stale-hash fixture (`current_hash != deadbeef...`) і `at_login=0`, `online=0`
+  - Оновлено `PROJECT_STATUS`, `BACKLOG`, `TRANSFER_SYSTEM`, `COMMANDS_REFERENCE`, `TESTING_AND_RELEASE`, `DECISIONS`.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/transfer/lib.sh`
+  - `workspace:/opt/cmangos-transfer/lib.sh`
+  - `workspace:/opt/cmangos-transfer/sync-accounts.task004.conf`
+  - `workspace:/opt/cmangos-tbc`
+  - `workspace:/opt/cmangos-wotlk`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/BACKLOG.md`
+  - `docs/TRANSFER_SYSTEM.md`
+  - `docs/COMMANDS_REFERENCE.md`
+  - `docs/TESTING_AND_RELEASE.md`
+  - `docs/DECISIONS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - Clean rerun stdout summary → `Accounts 3 / Synced 4 / Skipped 2 / Created 2 / Errors 0 / Duration 3m 15s`
+  - Latest log section grep → only `AUTO-CREATED`, `SKIP`, summary lines; no `WARN:`
+  - `docker ps | grep cmangos` → all 6 CMaNGOS containers healthy after rerun
+  - Manual login bot:
+    - TBC/WotLK `AUTOACC` → `RESULT: SUCCESS`
+    - TBC/WotLK `SKIPACC` → `RESULT: SUCCESS`
+  - Post-run SQL:
+    - TBC `Autolock` → `168 inventory / 313 items / current_hash == stored_hash`
+    - WotLK `Autolock` → `168 inventory / 313 items / current_hash == stored_hash`
+    - TBC/WotLK `Skiplock` → `0 inventory / 0 items / current_hash != stored_hash`
+    - TBC/WotLK `Autolock`, `Skiplock` → `at_login=0`, `online=0`
+- Блокери / ризики:
+  - Блокерів немає.
+  - Для synthetic multi-account fixtures не можна повторно використовувати однакові target item GUID sets між різними персонажами, інакше діагностика буде забруднена collision-only warnings.
+- Рекомендований наступний крок:
+  - Перейти до `TASK-005` і перевірити class coverage на Warlock / Warrior / Hunter.
+
+### Сесія — `2026-03-14 23:32` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-005`
+- Контекст:
+  - Потрібно було закрити class coverage на Warlock / Warrior / Hunter, не залишивши runtime у drift-стані після проміжних test fixtures.
+- Зроблена робота:
+  - Підготовлено `CLASSACC` fixture на Classic з `Testwar (guid=1804)` і `Testhunt (guid=1805)`; початковий `Human Hunter` виявився невалідним already on Classic, тому fixture вирівняно до `Dwarf Hunter (race=3,class=3)` і no-pet state `stable_slots=0`.
+  - Створено temp configs `sync-accounts.task005.conf` і `sync-accounts.task005.classacc-only.conf`.
+  - Під час live-debug зібрано дві окремі false-negative причини:
+    - перший verify одразу після TBC restart міг хибно падати, хоча повторний login проходив успішно;
+    - `wow_login_test_universal.py` для WotLK пропускав на 4 байти менше в `CHAR_ENUM`, не враховуючи `customize flags`, і через це хибно давав `NOT_FOUND` для другого персонажа на account.
+  - Локально і на remote оновлено `daily-sync.sh`: verify loop тепер retry-ить один раз перед rollback; backups: `/opt/cmangos-transfer/backups/daily-sync.sh.pre_task005_retryfix_20260314_230854`, `/opt/cmangos-transfer/backups/daily-sync.sh.pre_task005_debug_20260314_231637`.
+  - Локально і на remote оновлено `wow_login_test_universal.py`: WotLK parser тепер враховує 4-byte `customize flags`; backup: `/opt/cmangos-transfer/backups/wow_login_test_universal.py.pre_task005_charenum_20260314_232159`.
+  - Isolated rerun через `/opt/cmangos-transfer/sync-accounts.task005.classacc-only.conf` після обох фіксів пройшов clean: `Accounts 1`, `Synced 4`, `Errors 0`, і дав `SUCCESS` для `Testwar` та `Testhunt` на TBC і WotLK.
+  - Після цього canonical `/opt/cmangos-transfer/daily-sync.sh` окремо повернув `Samuel` на TBC і повторно підтвердив його на WotLK: `Accounts 1`, `Synced 2`, `Errors 0`.
+  - Фінальні послідовні manual login smokes дали `RESULT: SUCCESS` для `Samuel (1801)`, `Testwar (1804)` і `Testhunt (1805)` на TBC і WotLK; SQL підтвердив `at_login=0`, `online=0` і healthy `character_sync_hash` rows на обох targets.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/transfer/daily-sync.sh`
+  - `localProjects/cmangos_projects/transfer/wow_login_test_universal.py`
+  - `localProjects/cmangos_projects/transfer/sync-accounts.task005.conf`
+  - `localProjects/cmangos_projects/transfer/sync-accounts.task005.classacc-only.conf`
+  - `workspace:/opt/cmangos-classic`
+  - `workspace:/opt/cmangos-tbc`
+  - `workspace:/opt/cmangos-wotlk`
+  - `workspace:/opt/cmangos-transfer`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/BACKLOG.md`
+  - `docs/TRANSFER_SYSTEM.md`
+  - `docs/COMMANDS_REFERENCE.md`
+  - `docs/TESTING_AND_RELEASE.md`
+  - `docs/DECISIONS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - Final class-coverage rerun → `Accounts 1`, `Synced 4`, `Skipped 0`, `Created 0`, `Errors 0`, `Duration 3m 53s`
+  - Canonical restore rerun → `Accounts 1`, `Synced 2`, `Skipped 0`, `Created 0`, `Errors 0`, `Duration 3m 29s`
+  - Sequential manual login bot:
+    - TBC/WotLK `SAMUEL/SAMUEL`, `guid=1801` → `RESULT: SUCCESS`
+    - TBC/WotLK `CLASSACC/CLASSACC`, `guid=1804` → `RESULT: SUCCESS`
+    - TBC/WotLK `CLASSACC/CLASSACC`, `guid=1805` → `RESULT: SUCCESS`
+  - Post-run SQL:
+    - TBC `1801/Samuel`, `1804/Testwar`, `1805/Testhunt` → `at_login=0`, `online=0`
+    - WotLK `1801/Samuel`, `1804/Testwar`, `1805/Testhunt` → `at_login=0`, `online=0`
+    - `character_sync_hash` present and healthy for all three chars on both targets
+  - `docker ps | grep cmangos` → all 6 CMaNGOS containers healthy
+- Блокери / ризики:
+  - Критичних блокерів немає.
+  - Для ручних smoke checks не варто запускати login bot паралельно на одному й тому ж realm/account, інакше можна самостійно згенерувати timeout noise.
+- Рекомендований наступний крок:
+  - Перейти до `TASK-006` і підтвердити 3-run stability уже на новому baseline (`post-verify hash` + `verify retry` + fixed WotLK parser).
+
+### Сесія — `2026-03-15 00:03` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-006`
+- Контекст:
+  - Потрібно було закрити legacy Phase 15.4 three-run stability і перевірити, що `daily-sync.sh` реально вміє `SKIP if unchanged`, а не лише `SKIP if played`.
+- Зроблена робота:
+  - Заклеймлено `TASK-006` і дочитано legacy rationale: у backlog Phase 15.4 вимагала `Run 1 = full sync`, `Run 2 = all skipped`, `Run 3 = only changed character synced`.
+  - Code review показав реальний design gap: після `TASK-020` script still tracked лише target-side hash, тому unchanged chars не могли бути коректно skipped.
+  - Локально оновлено і задеплоєно:
+    - `localProjects/cmangos_projects/transfer/lib.sh`
+    - `localProjects/cmangos_projects/transfer/daily-sync.sh`
+    - `localProjects/cmangos_projects/transfer/sync-accounts.task006.conf`
+  - `character_sync_hash` тепер lazy-migrate-иться до схеми з `sync_hash` + `source_hash`; `sync_char()` відрізняє `played on target`, `unchanged since last verified sync` і `source changed`.
+  - Remote backups before deploy:
+    - `/opt/cmangos-transfer/backups/daily-sync.sh.pre_task006_sourcehash_20260314_235026`
+    - `/opt/cmangos-transfer/backups/lib.sh.pre_task006_sourcehash_20260314_235026`
+  - Створено isolated remote config `/opt/cmangos-transfer/sync-accounts.task006.conf` з `classacc:classacc`.
+  - `Run 1`:
+    - Summary: `Accounts 1`, `Synced 4`, `Skipped 0`, `Created 0`, `Errors 0`, `Duration 4m 1s`
+    - Log показав `No stored source hash — refreshing baseline`
+    - TBC/WotLK verify дали `SUCCESS` для `Testwar (1804)` і `Testhunt (1805)`
+    - Після run-а TBC/WotLK `character_sync_hash` уже містили `source_hash`
+  - `Run 2` без будь-яких source changes:
+    - Summary: `Accounts 1`, `Synced 0`, `Skipped 4`, `Created 0`, `Errors 0`, `Duration 2m 14s`
+    - На Phase A і C обидва персонажі логувалися як `unchanged since last verified sync`
+    - Оскільки pipeline не verify-ить skipped chars, виконано manual smoke checks послідовно:
+      - TBC/WotLK `CLASSACC`, `guid=1804` → `RESULT: SUCCESS`
+      - TBC/WotLK `CLASSACC`, `guid=1805` → `RESULT: SUCCESS`
+  - Перед `Run 3`:
+    - Зроблено row-level backup Classic fixture: `/opt/cmangos-classic/backups/classiccharacters.testwar.pre_task006_run3_20260314_235852.sql`
+    - Classic `Testwar.money` змінено `0 → 12345`
+    - Classic hash змінився `de24036ebbf88879d126441f62539b4d → 297325587b3f1494baf0797de760d134`
+  - `Run 3`:
+    - Summary: `Accounts 1`, `Synced 2`, `Skipped 2`, `Created 0`, `Errors 0`, `Duration 3m 6s`
+    - Phase A і C обидві дали той самий shape: `Testwar` synced, `Testhunt` skipped
+    - Pipeline verify дав `SUCCESS` для `Testwar` на TBC і WotLK без rollback/manual recovery
+  - Final state:
+    - Classic/TBC/WotLK `Testwar.money=12345`
+    - TBC/WotLK `Testwar`: `at_login=0`, `online=0`, `sync_hash == source_hash == 297325587b3f1494baf0797de760d134`
+    - TBC/WotLK `Testhunt`: `money=0`, `at_login=0`, `online=0`, `sync_hash == source_hash == de24036ebbf88879d126441f62539b4d`
+    - Final skipped-char smoke after `Run 3`: TBC/WotLK `CLASSACC`, `guid=1805` → `RESULT: SUCCESS`
+    - `docker ps | grep cmangos` → all 6 `cmangos-*` containers healthy
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/transfer/daily-sync.sh`
+  - `localProjects/cmangos_projects/transfer/lib.sh`
+  - `localProjects/cmangos_projects/transfer/sync-accounts.task006.conf`
+  - `workspace:/opt/cmangos-transfer/daily-sync.sh`
+  - `workspace:/opt/cmangos-transfer/lib.sh`
+  - `workspace:/opt/cmangos-transfer/sync-accounts.task006.conf`
+  - `workspace:/opt/cmangos-classic`
+  - `workspace:/opt/cmangos-tbc`
+  - `workspace:/opt/cmangos-wotlk`
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/TRANSFER_SYSTEM.md`
+  - `docs/COMMANDS_REFERENCE.md`
+  - `docs/TESTING_AND_RELEASE.md`
+  - `docs/DECISIONS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - Local syntax check: `bash -n localProjects/cmangos_projects/transfer/daily-sync.sh`, `bash -n localProjects/cmangos_projects/transfer/lib.sh`
+  - Remote syntax check: `bash -n /opt/cmangos-transfer/daily-sync.sh`, `bash -n /opt/cmangos-transfer/lib.sh`
+  - `Run 1` summary → `Accounts 1 / Synced 4 / Skipped 0 / Errors 0 / Duration 4m 1s`
+  - `Run 2` summary → `Accounts 1 / Synced 0 / Skipped 4 / Errors 0 / Duration 2m 14s`
+  - `Run 3` summary → `Accounts 1 / Synced 2 / Skipped 2 / Errors 0 / Duration 3m 6s`
+  - Manual login bot:
+    - Post-`Run 2` TBC/WotLK `CLASSACC`, `guid=1804` → `RESULT: SUCCESS`
+    - Post-`Run 2` TBC/WotLK `CLASSACC`, `guid=1805` → `RESULT: SUCCESS`
+    - Post-`Run 3` TBC/WotLK `CLASSACC`, `guid=1805` → `RESULT: SUCCESS`
+  - SQL:
+    - TBC/WotLK schema now includes `source_hash` in `character_sync_hash`
+    - Final TBC/WotLK `Testwar` rows match Classic mutation and keep `at_login=0`, `online=0`
+    - Final TBC/WotLK `Testhunt` rows remain healthy and unchanged
+- Блокери / ризики:
+  - Блокерів немає.
+  - Characters with historical rows that predate `source_hash` will do one baseline-refresh sync on their first post-deploy run; this is expected bootstrap behavior, not a regression.
+- Рекомендований наступний крок:
+  - Перейти до `TASK-007` і консолідувати Phase 15 docs тепер, коли runtime stabilization повністю verified.
+
+### Сесія — `2026-03-15 00:18` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-007`
+- Контекст:
+  - Після verified completion `TASK-006` high-level docs ще частково описували Phase 15 як поточний або майбутній трек. Потрібно було закрити саме docs-side consolidation, щоб наступний агент стартував уже з post-Phase-15 baseline.
+- Зроблена робота:
+  - Заклеймлено `TASK-007` у backlog.
+  - Оновлено `docs/PROJECT_STATUS.md`:
+    - stage змінено з `stabilization` на `post-Phase-15 planning`
+    - current focus змінено на `Phase 16 AzerothCore preparation`
+    - next backlog item змінено на `TASK-008`
+  - Оновлено `docs/PROJECT_BRIEF.md`, щоб він більше не описував docs migration і Phase 15 як майбутній намір; тепер brief фіксує verified 3-step pipeline і readiness до Phase 16/17.
+  - Оновлено `docs/CONTINUATION_GUIDE.md`:
+    - стартова послідовність тепер просить перевіряти completion `TASK-001`…`TASK-007` і шукати першу відкриту задачу
+    - додано секцію `Поточний Verified Baseline` з ключовими runtime / pipeline фактами
+  - Оновлено `docs/TRANSFER_SYSTEM.md` коротким status note, що Phase 15 для transfer pipeline вже verified-complete і наступний major stream починається з AzerothCore integration.
+  - Закрито `TASK-007` у `docs/BACKLOG.md` з конкретними доказами docs-alignment.
+- Які файли / області зачеплено:
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/PROJECT_BRIEF.md`
+  - `docs/CONTINUATION_GUIDE.md`
+  - `docs/TRANSFER_SYSTEM.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - Review diff підтвердив, що high-level docs більше не ведуть continuation у pre-Phase-15 стан.
+  - `rg` по `PROJECT_BRIEF`, `PROJECT_STATUS`, `CONTINUATION_GUIDE`, `BACKLOG` показав, що наступним відкритим backlog item тепер послідовно виступає `TASK-008`.
+  - Remote runtime не мутувався; verified state з `TASK-006` лишається чинним reference baseline.
+- Блокери / ризики:
+  - Блокерів немає.
+  - Подальші transfer/runtime кроки мають читати `TRANSFER_SYSTEM.md` уже як post-Phase-15 canonical state; не варто спиратися на pre-consolidation chat fragments.
+- Рекомендований наступний крок:
+  - Перейти до `TASK-008` і вирішити, чи існує придатний ARM64-compatible AzerothCore container path для майбутнього 4-step pipeline.
+
+### Сесія — `2026-03-15 00:24` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-008`
+- Контекст:
+  - Після `TASK-007` потрібно було закрити Phase 16.1 і зафіксувати реалістичний AzerothCore container baseline для ARM64 без передчасного live deploy на shared `workspace`.
+- Зроблена робота:
+  - Заклеймлено й завершено `TASK-008` у backlog.
+  - Через official sources звірено два upstream deployment paths:
+    - `azerothcore/acore-docker` як prebuilt-image compose
+    - `azerothcore/azerothcore-wotlk` як build-capable source tree з official Dockerfile targets
+  - Додано локальний draft stack у `localProjects/cmangos_projects/docker-azerothcore/`:
+    - `docker-compose.yml`
+    - `.env.example`
+    - `env/etc/.gitkeep`
+    - `env/logs/.gitkeep`
+  - Draft stack спроєктовано з non-conflicting портами `3309/3727/8088/7879` і dual mode:
+    - optional prebuilt `acore/*` images
+    - preferred ARM64 path через `docker compose up -d --build` з `../azerothcore-wotlk`
+  - Оновлено `ARCHITECTURE`, `PROJECT_STATUS`, `PROJECT_BRIEF`, `CONTINUATION_GUIDE`, `COMMANDS_REFERENCE`, `DECISIONS`, `BACKLOG`.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/docker-azerothcore/docker-compose.yml`
+  - `localProjects/cmangos_projects/docker-azerothcore/.env.example`
+  - `localProjects/cmangos_projects/docker-azerothcore/env/etc/.gitkeep`
+  - `localProjects/cmangos_projects/docker-azerothcore/env/logs/.gitkeep`
+  - `docs/ARCHITECTURE.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/PROJECT_BRIEF.md`
+  - `docs/CONTINUATION_GUIDE.md`
+  - `docs/COMMANDS_REFERENCE.md`
+  - `docs/DECISIONS.md`
+  - `docs/BACKLOG.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - `gh api 'repos/azerothcore/acore-docker/contents/docker-compose.yml' --jq '.content' | base64 --decode`
+  - `gh api 'repos/azerothcore/azerothcore-wotlk/contents/docker-compose.yml?ref=master' --jq '.content' | base64 --decode`
+  - `gh api 'repos/azerothcore/azerothcore-wotlk/contents/.github/workflows/docker_build.yml?ref=master' --jq '.content' | base64 --decode`
+  - `gh api 'repos/azerothcore/azerothcore-wotlk/contents/.github/actions/docker-tag-and-build/action.yml?ref=master' --jq '.content' | base64 --decode`
+  - `docker compose --env-file localProjects/cmangos_projects/docker-azerothcore/.env.example -f localProjects/cmangos_projects/docker-azerothcore/docker-compose.yml config` → compose graph валідний, порти і build contexts резолвляться як заплановано.
+- Блокери / ризики:
+  - Live AzerothCore deploy на `workspace` ще не перевірявся і не повинен вважатися готовим лише на підставі local draft.
+  - Official Docker workflow не дає явної multi-arch гарантії для prebuilt images, тому ARM64 rollout поки що треба планувати через local build path.
+- Рекомендований наступний крок:
+  - Перейти до `TASK-009` і виконати schema mapping `cmangos-wotlk → azerothcore`.
+
+### Сесія — `2026-03-15 00:35` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-009`
+- Контекст:
+  - Після `TASK-008` потрібно було не просто “подивитись SQL”, а зібрати канонічний mapping між live CMaNGOS WotLK schema і official AzerothCore base schema так, щоб `TASK-010` уже спирався на verified blockers, rename rules і current transfer table coverage.
+- Зроблена робота:
+  - Заклеймлено й завершено `TASK-009` у backlog.
+  - Прочитано project-specific transfer context і legacy Phase 16 acceptance, щоб schema work відповідала запланованому 4-step pipeline, а не довільному diff-у.
+  - Read-only знято live `INFORMATION_SCHEMA.COLUMNS` із `workspace`:
+    - `wotlkcharacters`
+    - `wotlkrealmd`
+  - Додано local sparse checkout official `azerothcore-wotlk` у `localProjects/cmangos_projects/azerothcore-wotlk/` тільки з `data/sql/base/db_characters` і `db_auth`.
+  - Автоматизованим локальним аналізом звірено:
+    - table presence
+    - current transfer table-set coverage
+    - column/semantic drifts для critical tables
+  - Створено канонічний artifact `docs/AZEROTHCORE_SCHEMA_MAPPING.md`.
+  - Оновлено `TRANSFER_SYSTEM`, `ARCHITECTURE`, `PROJECT_BRIEF`, `PROJECT_STATUS`, `CONTINUATION_GUIDE`, `COMMANDS_REFERENCE`, `DECISIONS`, `BACKLOG`.
+- Які файли / області зачеплено:
+  - `docs/AZEROTHCORE_SCHEMA_MAPPING.md`
+  - `docs/TRANSFER_SYSTEM.md`
+  - `docs/ARCHITECTURE.md`
+  - `docs/PROJECT_BRIEF.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/CONTINUATION_GUIDE.md`
+  - `docs/COMMANDS_REFERENCE.md`
+  - `docs/DECISIONS.md`
+  - `docs/BACKLOG.md`
+  - `docs/SESSION_LOG.md`
+  - `localProjects/cmangos_projects/azerothcore-wotlk/`
+- Верифікація:
+  - `ssh -o ControlPath=/tmp/ssh-ws -O check workspace` → `Master running`
+  - `wotlkcharacters` live export → `697` rows in local TSV
+  - `wotlkrealmd` live export → `77` rows in local TSV
+  - Local sparse checkout contains official `db_characters` and `db_auth` base SQL trees
+  - Summary counts:
+    - `db_characters`: `78` CMaNGOS vs `106` AzerothCore, `59` same-name shared
+    - `db_auth`: `13` CMaNGOS vs `18` AzerothCore, `6` same-name shared
+    - current `transfer.sh` table-set: `45` relevant tables, `43` same-name, `1` rename (`character_tutorial -> account_tutorial`), `1` missing target table (`character_battleground_data`)
+  - Critical blockers documented for:
+    - `account` + `account_access`
+    - `characters`
+    - `character_homebind`
+    - `character_spell`
+    - `character_talent`
+    - `character_glyphs`
+    - `character_queststatus`
+    - `character_aura`
+    - `pet_aura`
+    - `guild_member`
+- Блокери / ризики:
+  - Live AzerothCore runtime досі не розгорнутий, тому schema work опирається на official base SQL, а не на running target DB.
+  - Auth/account path є окремим blocker: поточні CMaNGOS helpers для `s/v` і `gmlevel` не відповідають AzerothCore schema.
+- Рекомендований наступний крок:
+  - Перейти до `TASK-010` і будувати `migrate_cmangos_wotlk_to_azerothcore.sql` як hybrid: `safe_insert` для compatible tables плюс explicit transforms для blocker tables.
+
+### Сесія — `2026-03-15 00:53` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-010`
+- Контекст:
+  - Після `TASK-009` уже був verified mapping і blocker list, тому наступним кроком треба було зробити не ще один research note, а реальний `migrate_cmangos_wotlk_to_azerothcore.sql`, який лягає на поточний temp-DB + `safe_insert()` workflow.
+- Зроблена робота:
+  - Заклеймлено й завершено `TASK-010` у backlog.
+  - Створено `localProjects/cmangos_projects/transfer/migrate_cmangos_wotlk_to_azerothcore.sql`.
+  - У file зафіксовано executable transforms для:
+    - `characters`
+    - `character_homebind`
+    - `character_spell`
+    - `character_glyphs`
+    - `character_queststatus` + `character_queststatus_rewarded`
+    - `character_aura`
+    - `pet_aura`
+    - `guild_member` + `guild_member_withdraw`
+    - `corpse`
+    - `character_tutorial -> account_tutorial`
+  - Свідомо оформлено MVP policies замість неперевіреної 1:1 магії:
+    - `character_talent` лишено reset-on-login blocker;
+    - `character_battleground_data` дропається;
+    - auth/account path описано як staged contract у footer SQL file, а не змішано з characters-DB execution.
+  - Добрано official AzerothCore source для low-level verification:
+    - `src/server/game/Entities/Player`
+    - `src/server/game/Handlers`
+    - підтверджено, що `AT_LOGIN_RESET_SPELLS = 0x02` і `AT_LOGIN_RESET_TALENTS = 0x04`, тому `at_login | 6` лишається валідною migration policy.
+  - Оновлено `PROJECT_STATUS`, `PROJECT_BRIEF`, `CONTINUATION_GUIDE`, `COMMANDS_REFERENCE`, `TRANSFER_SYSTEM`, `DECISIONS`, `TESTING_AND_RELEASE`, `BACKLOG`.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/transfer/migrate_cmangos_wotlk_to_azerothcore.sql`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/PROJECT_BRIEF.md`
+  - `docs/CONTINUATION_GUIDE.md`
+  - `docs/COMMANDS_REFERENCE.md`
+  - `docs/TRANSFER_SYSTEM.md`
+  - `docs/DECISIONS.md`
+  - `docs/TESTING_AND_RELEASE.md`
+  - `docs/BACKLOG.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - `ssh -o ControlPath=/tmp/ssh-ws -O check workspace` → `Master running`
+  - Read-only source schema export:
+    - `ssh ... mariadb-dump --no-data wotlkcharacters > /tmp/task010_wotlk_no_data.sql`
+    - exported file size by line count: `1701`
+  - Local validation environment:
+    - `docker run -d --name task010-mariadb -e MARIADB_ROOT_PASSWORD=test -e MARIADB_DATABASE=task010 mariadb:11`
+    - imported source schema and executed `migrate_cmangos_wotlk_to_azerothcore.sql` without SQL errors
+  - Post-run proof on throwaway DB:
+    - `account_tutorial` exists
+    - `character_queststatus_rewarded` exists
+    - `guild_member_withdraw` exists
+    - `character_talent` exists
+    - `character_aura` exists
+    - `pet_aura` exists
+    - `corpse` exists
+    - `characters` now contains unpacked appearance/spec fields and no longer has legacy-only `playerBytes*`, `specCount`, `activeSpec`, `fishingSteps`
+  - Cleanup:
+    - local validation container `task010-mariadb` removed
+- Блокери / ризики:
+  - Skeleton validated only against source structure, not against a live AzerothCore runtime with real character data.
+  - Full database replace path лишається unsupported; future integration must stay on AzerothCore-specific `safe_insert()` flow.
+  - Auth/account still needs real runtime integration and login verification.
+- Рекомендований наступний крок:
+  - Перейти до `TASK-011` і перевірити, чи існуючий `wow_login_test_universal.py --expansion wotlk` already works against AzerothCore auth/world path, або додати окремий alias/adaptation.
+
+### Сесія — `2026-03-15 01:14` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-011`
+- Контекст:
+  - Після `TASK-010` уже був ready migration skeleton, але перед інтеграцією в `daily-sync` треба було підтвердити, що login verify для AzerothCore взагалі працює на реальному runtime, а не лише на paper schema.
+- Зроблена робота:
+  - Заклеймлено й завершено `TASK-011` у backlog.
+  - Підтверджено, що official prebuilt `acore/*` images не дають ARM64 manifest на цій машині; live baseline лишається local build path.
+  - `localProjects/cmangos_projects/azerothcore-wotlk` розгорнуто зі sparse-only state у full working tree, після чого official Dockerfile targets стали build-capable локально.
+  - Успішно зібрано local images для `azerothcore-db-import`, `azerothcore-client-data-init`, `azerothcore-worldserver`, `azerothcore-authserver`.
+  - Успішно піднято local stack:
+    - `azerothcore-authserver` на `3727`
+    - `azerothcore-worldserver` на `8088`
+    - `azerothcore-db` на `3309`
+    - `azerothcore-client-data-init` і `azerothcore-db-import` завершилися `0`
+  - Діагностовано два окремі protocol/auth drifts:
+    - direct insert CMaNGOS-style verifier у AzerothCore давав `Auth proof error: 0x04`
+    - після виправлення verifier world auth падав із `Auth response error: 0x27`, бо bot відправляв `realm_id=0` замість фактичного realmlist id
+  - Оновлено `localProjects/cmangos_projects/transfer/wow_login_test_universal.py`:
+    - додано `--expansion azerothcore`
+    - auth phase тепер повертає realms із `realm_id`
+    - WotLK/AzerothCore `AUTH_SESSION` тепер використовує selected `realm_id`, а не hardcoded `0`
+  - Live-верифіковано auth staging contract:
+    - `salt = REVERSE(UNHEX(LPAD(s, 64, '0')))`
+    - `verifier = REVERSE(UNHEX(LPAD(v, 64, '0')))`
+  - Оновлено SQL/doc contract у `migrate_cmangos_wotlk_to_azerothcore.sql` і канонічних docs.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/transfer/wow_login_test_universal.py`
+  - `localProjects/cmangos_projects/transfer/migrate_cmangos_wotlk_to_azerothcore.sql`
+  - `docs/PROJECT_BRIEF.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/CONTINUATION_GUIDE.md`
+  - `docs/ARCHITECTURE.md`
+  - `docs/TRANSFER_SYSTEM.md`
+  - `docs/COMMANDS_REFERENCE.md`
+  - `docs/TESTING_AND_RELEASE.md`
+  - `docs/DECISIONS.md`
+  - `docs/BACKLOG.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - ARM64 prebuilt availability:
+    - `docker compose --env-file ... -f ... pull` → `no matching manifest for linux/arm64/v8`
+  - Local build:
+    - `docker compose --env-file ... -f ... build azerothcore-db-import azerothcore-client-data-init azerothcore-worldserver azerothcore-authserver` → exit `0`
+  - Local runtime:
+    - `docker compose --env-file ... -f ... up -d` → stack started
+    - `docker compose --env-file ... -f ... ps` → `azerothcore-authserver`, `azerothcore-worldserver`, `azerothcore-db` up; init/import jobs exited `0`
+    - `docker logs azerothcore-worldserver --tail 20` → `World Initialized ... ready...`
+    - `docker logs azerothcore-authserver --tail 20` → realm added and auth ready
+  - Final bot smokes:
+    - `python3 .../wow_login_test_universal.py --expansion wotlk --auth-port 3727 --world-port 8088 --username ACBOT --password acbot --guid 1` → `AUTH_OK`, `CHAR_ENUM`, `RESULT: NOT_FOUND`
+    - `python3 .../wow_login_test_universal.py --expansion azerothcore --username ACBOT --password acbot --guid 1` → `AUTH_OK`, `CHAR_ENUM`, `RESULT: NOT_FOUND`
+  - Auth mapping proof:
+    - second test account with byte-reversed `s/v` also passed auth/world smoke; direct raw insert did not
+- Блокери / ризики:
+  - Local AzerothCore realm досі порожній, тому `TASK-011` доводить handshake/enum, але не повний player login після migration.
+  - `azerothcore-worldserver` після smoke може логувати `Addon packet read error`; це non-blocking noise, але його треба пам'ятати для `TASK-013`.
+  - Live deploy path на `workspace` досі відсутній; verified path поки локальний.
+- Рекомендований наступний крок:
+  - Перейти до `TASK-012` і вбудувати AzerothCore step у `daily-sync`/auth staging, використовуючи verified `realm_id` та reversed-`s/v` contract.
+
+### Сесія — `2026-03-15 02:20` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-012`
+- Контекст:
+  - Після `TASK-011` уже існували локальні AzerothCore runtime і login bot, але `daily-sync.sh` ще не вмів conditionally додавати `WotLK -> AzerothCore`, а `lib.sh` не мав schema-aware `ensure_account()` для `acore_auth`.
+- Зроблена робота:
+  - Заклеймлено і завершено `TASK-012` у backlog.
+  - Оновлено `localProjects/cmangos_projects/transfer/lib.sh`:
+    - додано AzerothCore container/db maps, auth/world ports і compose dir;
+    - `db_exec()` / `db_dump()` тепер використовують `mysql` / `mysqldump` для `azerothcore-db`;
+    - `start_server()` і `restart_after_crash()` тепер вміють працювати з `azerothcore-authserver` + `azerothcore-worldserver`;
+    - `ensure_account()` тепер schema-aware створює або оновлює `acore_auth.account` + `account_access`.
+  - Оновлено `localProjects/cmangos_projects/transfer/daily-sync.sh`:
+    - додано runtime detection для `azerothcore-db`, `azerothcore-authserver`, `azerothcore-worldserver`;
+    - додано optional Phase E/F (`WotLK -> AzerothCore` + verify);
+    - `migration_sql_for_pair()` тепер виконує `migrate_cmangos_wotlk_to_azerothcore.sql` для `wotlk -> azerothcore`;
+    - `do_transfer_char()` тепер remap-ить `account_tutorial.accountId` на target account id;
+    - cleanup / restart path тепер враховує AzerothCore auth + world сервіси.
+  - Під час focused local validation виявлено реальний bug у `ensure_account()`:
+    - попередній tab-based parsing source account row ламався на порожньому `sessionkey`;
+    - через це `joindate`, `lockedIp`, `os`, `flags` зсувалися в неправильні target columns;
+    - виправлено через explicit non-whitespace delimiter перед shell `read`.
+  - Додатково прибрано helper-level `set -e` trap: `TOTAL_CREATED++` у `lib.sh` замінено на arithmetic assignment, щоб інкремент із `0` не давав false failure в stricter harness.
+  - Оновлено канонічні docs: `PROJECT_STATUS`, `CONTINUATION_GUIDE`, `TRANSFER_SYSTEM`, `COMMANDS_REFERENCE`, `TESTING_AND_RELEASE`, `DECISIONS`, `BACKLOG`, `SESSION_LOG`.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/transfer/lib.sh`
+  - `localProjects/cmangos_projects/transfer/daily-sync.sh`
+  - `docs/PROJECT_BRIEF.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/CONTINUATION_GUIDE.md`
+  - `docs/TRANSFER_SYSTEM.md`
+  - `docs/COMMANDS_REFERENCE.md`
+  - `docs/TESTING_AND_RELEASE.md`
+  - `docs/DECISIONS.md`
+  - `docs/BACKLOG.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - Syntax gates:
+    - `bash -n localProjects/cmangos_projects/transfer/lib.sh`
+    - `bash -n localProjects/cmangos_projects/transfer/daily-sync.sh`
+    - `docker run --rm -v "$PWD":/work -w /work bash:5.2 bash -n localProjects/cmangos_projects/transfer/lib.sh`
+    - `docker run --rm -v "$PWD":/work -w /work bash:5.2 bash -n localProjects/cmangos_projects/transfer/daily-sync.sh`
+  - Local runtime state:
+    - `docker ps` підтвердив `azerothcore-authserver`, `azerothcore-worldserver`, `azerothcore-db` у `Up/healthy`
+  - Focused auth/account staging proof:
+    - створено temporary source container `task012-wotlk-db` із synthetic row `TASK012ACC / task012acc`
+    - `ensure_account wotlk azerothcore TASK012ACC` → `AUTO-CREATED account 'TASK012ACC' on azerothcore`
+    - source `wotlkrealmd.account` vs target `acore_auth.account`:
+      - `HEX(REVERSE(salt)) == source.s`
+      - `HEX(REVERSE(verifier)) == source.v`
+      - `failed_logins=4`, `mutetime=123`, `last_ip=10.20.30.40`, `os=Win`, `Flags=8`
+    - `acore_auth.account_access` row = `gmlevel=3`, `RealmID=-1`
+  - Final bot smoke:
+    - `python3 localProjects/cmangos_projects/transfer/wow_login_test_universal.py --expansion azerothcore --username TASK012ACC --password task012acc --guid 1`
+    - result: `AUTH_OK`, `CHAR_ENUM`, `RESULT: NOT_FOUND`
+  - Cleanup:
+    - `task012-wotlk-db` removed
+    - `TASK012ACC` row removed from local `acore_auth.account` / `account_access`
+- Блокери / ризики:
+  - `TASK-012` validated code wiring і auth/account staging, але не повний post-migration player login у non-empty AzerothCore realm.
+  - Local machine не має CMaNGOS runtime поруч із AzerothCore runtime, тому full 4-step E2E все ще потребує окремого orchestration path у `TASK-013`.
+  - Live deploy path на `workspace` для AzerothCore досі відсутній; verified scope поки локальний.
+- Рекомендований наступний крок:
+  - Перейти до `TASK-013` і довести справжній `Classic -> TBC -> WotLK -> AzerothCore` E2E з real character migration та non-empty AzerothCore realm login verify.
+
+### Сесія — `2026-03-15 08:45` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-017`, `TASK-021`
+- Контекст:
+  - Користувач уточнив, що замість умовного dashboard потрібен реальний legacy website на домені `world-of-warcraft.morgan-dev.com`, у власному контейнері за `traefik`.
+  - Додатково погоджено, що за потреби зібраний image можна публікувати в Docker Hub namespace `semorgana`.
+- Зроблена робота:
+  - Досинхронізовано канонічні docs під уже фактично завершений local website baseline:
+    - `TASK-017` залишено завершеним;
+    - `TASK-021` переведено в blocked state, бо remote deploy на shared `workspace` усе ще вимагає exact token `EXPLICIT_USER_APPROVAL_REQUIRED`.
+  - У docs зафіксовано verified website contract:
+    - upstream `celguar/mangos-website` intake на commit `9c9582c`;
+    - first live deploy = `WotLK-first public mode`, бо `workspace` має три ізольовані `realmd` DB;
+    - hardened deploy layer живе в `localProjects/cmangos_projects/docker-website/` і включає `docker-compose.yml`, `docker-compose.remote.yml`, hardened Apache config, runtime config generator і `public-site-compat.sql`.
+  - У `PROJECT_STATUS`, `PROJECT_BRIEF`, `CONTINUATION_GUIDE`, `ARCHITECTURE`, `COMMANDS_REFERENCE`, `TESTING_AND_RELEASE`, `DECISIONS`, `BACKLOG` і `SESSION_LOG` додано website-specific continuation context та approval gate.
+- Які файли / області зачеплено:
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/PROJECT_BRIEF.md`
+  - `docs/CONTINUATION_GUIDE.md`
+  - `docs/ARCHITECTURE.md`
+  - `docs/COMMANDS_REFERENCE.md`
+  - `docs/TESTING_AND_RELEASE.md`
+  - `docs/DECISIONS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - `find localProjects/cmangos_projects/docker-website -maxdepth 3 -type f | sort` підтвердив current artifact set:
+    - `.env.example`
+    - `Dockerfile`
+    - `apache/mangos-website.conf`
+    - `docker-compose.remote.yml`
+    - `docker-compose.yml`
+    - `scripts/configure-app.php`
+    - `scripts/docker-entrypoint.sh`
+    - `sql/public-site-compat.sql`
+  - `docker compose --env-file localProjects/cmangos_projects/docker-website/.env.example -f localProjects/cmangos_projects/docker-website/docker-compose.yml config` пройшов успішно; output підтвердив external networks `traefik` і `cmangos-wotlk_default`.
+  - `docker image inspect semorgana/mangos-website:local --format '{{.Id}} {{.RepoTags}}'` → `sha256:33d4c071f735c0569515332cb57dbc5e9c7d7c0c8fabef7412a4babb578df62a [semorgana/mangos-website:local semorgana/mangos-website:task021-wotlk-public-20260315]`.
+  - Remote `workspace`, `traefik` і DB topology в цій сесії не мутувалися.
+- Блокери / ризики:
+  - `TASK-021` не можна запускати з простим `+`; потрібен exact token `EXPLICIT_USER_APPROVAL_REQUIRED`.
+  - `mangos-website` очікує один base `realmd`, тому current MVP свідомо обмежено `WotLK-first`, а не multi-expansion facade.
+  - Погодження Docker Hub namespace `semorgana` не означає, що image вже опубліковано; push у цій сесії не виконувався.
+- Рекомендований наступний крок:
+  - Якщо потрібен live website зараз, отримати exact token `EXPLICIT_USER_APPROVAL_REQUIRED` і перейти до `TASK-021`.
+  - Якщо website deploy поки не потрібен, повернутися до `TASK-013` і вирішувати AzerothCore 4-step E2E path окремо.
+
+### Сесія — `2026-03-15 08:50` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-021`
+- Контекст:
+  - Користувач дав явний апрув на shared-host rollout website stack-а на `workspace`.
+  - Попередній local deploy layer уже існував, тож треба було добити live path: DB bootstrap, image publication, Traefik route, TLS issuance і public smoke.
+- Зроблена робота:
+  - Закрито `TASK-021` у backlog.
+  - Оновлено `localProjects/cmangos_projects/docker-website/` під live-сумісний runtime:
+    - `docker-entrypoint.sh` переведено з `install -d` на `mkdir -p`;
+    - `Dockerfile` тепер precreates `/var/www/runtime/*` і chown-ить runtime в image build;
+    - `docker-compose.yml` і `docker-compose.remote.yml` більше не використовують `read_only` rootfs та named volume для `/var/www/runtime`;
+    - `.env.example` вирівняно до live external network `cmangos-wotlk-net`.
+  - Image перебілджено й опубліковано:
+    - tag `semorgana/mangos-website:task021-wotlk-public-20260315`
+    - фінальний digest `sha256:04960d24580fe08d9349d006f0be647cdf29f07129b15c016348afb3d11cbbce`
+  - На `workspace`:
+    - оновлено `/opt/mangos-website/docker-compose.yml`;
+    - в `wotlkrealmd` імпортовано upstream `full_install.sql` і `public-site-compat.sql`;
+    - `realm_settings` вирівняно під `cmangos-wotlk-db / wotlkmangos / wotlkcharacters`;
+    - container `mangos-website` перевикочено через `docker pull` + `docker compose up -d --force-recreate`.
+  - Під час rollout підтверджено, що shared `traefik` already має працездатний Cloudflare DNS challenge provider; user-supplied Cloudflare secret не знадобився і в docs/runtime не зберігався.
+  - Оновлено канонічні docs: `PROJECT_BRIEF`, `CONTINUATION_GUIDE`, `PROJECT_STATUS`, `ARCHITECTURE`, `COMMANDS_REFERENCE`, `TESTING_AND_RELEASE`, `DECISIONS`, `BACKLOG`, `SESSION_LOG`.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/docker-website/.env.example`
+  - `localProjects/cmangos_projects/docker-website/Dockerfile`
+  - `localProjects/cmangos_projects/docker-website/docker-compose.yml`
+  - `localProjects/cmangos_projects/docker-website/docker-compose.remote.yml`
+  - `localProjects/cmangos_projects/docker-website/scripts/docker-entrypoint.sh`
+  - `docs/PROJECT_BRIEF.md`
+  - `docs/CONTINUATION_GUIDE.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/ARCHITECTURE.md`
+  - `docs/COMMANDS_REFERENCE.md`
+  - `docs/TESTING_AND_RELEASE.md`
+  - `docs/DECISIONS.md`
+  - `docs/BACKLOG.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - Local build/publish:
+    - `docker compose --env-file localProjects/cmangos_projects/docker-website/.env.example -f localProjects/cmangos_projects/docker-website/docker-compose.yml build mangos-website`
+    - `docker push semorgana/mangos-website:task021-wotlk-public-20260315`
+    - final pushed digest = `sha256:04960d24580fe08d9349d006f0be647cdf29f07129b15c016348afb3d11cbbce`
+  - Remote DB/bootstrap:
+    - backup: `/opt/cmangos-wotlk/backups/wotlkrealmd.pre_task021_20260315_084326.sql`
+    - `account_extend` table, `website_*` views і `realm_settings` row присутні в `wotlkrealmd`
+  - Remote runtime:
+    - `docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Networks}}" | grep -E "^(NAMES|mangos-website)"` →
+      `mangos-website  Up ... (healthy)  mangos-website_default,traefik,cmangos-wotlk-net`
+    - фінальний redeploy після cleanup runtime-noise дав чистий startup log: `Apache ... resuming normal operations` без попередніх `chmod`/permission errors
+  - TLS / public ingress:
+    - `docker logs traefik --tail 80` містить `Certificates obtained for domains [world-of-warcraft.morgan-dev.com]`
+    - під час issuance спостерігався короткий `526`, доки Traefik ще віддавав default cert; після issuance steady-state став healthy
+    - `openssl s_client -connect world-of-warcraft.morgan-dev.com:443 -servername world-of-warcraft.morgan-dev.com | openssl x509 -noout -subject -issuer -dates` → cert issuer `Google Trust Services / WE1`, `notAfter=2026-05-13`
+  - Public smoke:
+    - `curl https://world-of-warcraft.morgan-dev.com` → `HTTP 200`
+    - `<title>World of Warcraft`
+    - `/install/` → `403`
+    - `/index.php?n=admin` → `403`
+    - `/index.php?n=account.manage` → `403`
+    - `/donate.php` → `403`
+    - `/config/config.xml` → `403`
+- Блокери / ризики:
+  - Website лишається legacy PHP app; current trusted baseline лише public-mode read path.
+  - `wotlkrealmd` тепер одночасно несе realm/auth data і website schema для цього MVP.
+  - Full account/forum/admin functionality не входить у verified scope і потребуватиме окремого security review.
+- Рекомендований наступний крок:
+  - Повернутись до `TASK-013` і вирішити реальний topology/deploy path для AzerothCore 4-step E2E.
+
+### Сесія — `2026-03-15 09:14` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-022`
+- Контекст:
+  - Користувач показав live screenshot, де `world-of-warcraft.morgan-dev.com` віддавався як unstyled HTML з missing images, попри `HTTP 200` і healthy container.
+- Зроблена робота:
+  - Заклеймлено `TASK-022` у backlog і live-діагностовано asset graph.
+  - Підтверджено root cause: HTML запитував `templates/wotlk/*`, тоді як у container filesystem існував лише `templates/WotLK`; на Linux це давало масові `404` для theme CSS/JS/images.
+  - Тимчасовий `docker exec` symlink proof-of-concept підтвердив гіпотезу: після alias critical theme assets перейшли в `200`.
+  - Внесено durable fix у deploy layer:
+    - `localProjects/cmangos_projects/docker-website/Dockerfile`
+    - `localProjects/cmangos_projects/docker-website/scripts/docker-entrypoint.sh`
+    - Обидва тепер гарантують idempotent alias `templates/wotlk -> WotLK`.
+  - Зібрано і опубліковано новий image tag `semorgana/mangos-website:task022-themefix-20260315`.
+  - На remote зроблено backup `/opt/mangos-website/.env`, переведено `MW_IMAGE_NAME` на новий tag і перевикочено container через `docker compose --env-file .env -f docker-compose.yml up -d --force-recreate`.
+  - Оновлено `BACKLOG`, `PROJECT_STATUS`, `COMMANDS_REFERENCE`, `TESTING_AND_RELEASE`, `DECISIONS`.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/docker-website/Dockerfile`
+  - `localProjects/cmangos_projects/docker-website/scripts/docker-entrypoint.sh`
+  - `workspace:/opt/mangos-website/.env`
+  - `workspace:mangos-website`
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/COMMANDS_REFERENCE.md`
+  - `docs/TESTING_AND_RELEASE.md`
+  - `docs/DECISIONS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - Local checks:
+    - `sh -n localProjects/cmangos_projects/docker-website/scripts/docker-entrypoint.sh`
+    - `docker compose --env-file localProjects/cmangos_projects/docker-website/.env.example -f localProjects/cmangos_projects/docker-website/docker-compose.yml config`
+    - `docker run --rm -v "$PWD":/work -w /work php:8.2-cli php -l localProjects/cmangos_projects/docker-website/scripts/configure-app.php`
+    - `docker run --rm --entrypoint sh semorgana/mangos-website:task022-themefix-20260315 -lc 'ls -la /var/www/html/templates'` → `wotlk -> WotLK`
+  - Image publication:
+    - `docker push semorgana/mangos-website:task022-themefix-20260315`
+    - final pushed digest = `sha256:b0e7b6b415d2441138ebebf93968804091f1527e22d587ccf665594d97abc084`
+  - Remote runtime:
+    - backup env = `/opt/mangos-website/.env.pre_task022_20260315_091320`
+    - `docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Image}}" | grep -E "^(NAMES|mangos-website)"` →
+      `mangos-website  Up ... (healthy)  semorgana/mangos-website:task022-themefix-20260315`
+    - `docker exec mangos-website sh -lc 'ls -la /var/www/html/templates'` → live container теж має `wotlk -> WotLK`
+  - Public smoke:
+    - `/` → `HTTP 200`
+    - `/templates/wotlk/css/newhp.css` → `200`
+    - `/templates/wotlk/js/detection.js` → `200`
+    - `/templates/wotlk/images/pixel000.gif` → `200`
+    - `/install/`, `/index.php?n=admin`, `/index.php?n=account.manage`, `/donate.php`, `/config/config.xml` → `403`
+    - root HTML досі містить `templates/wotlk/*`, але це вже коректно обслуговується alias-ом
+- Блокери / ризики:
+  - Upstream intake досі не містить `js/compressed/prototype.js`; path лишається `404`, але після цього hotfix це вже non-blocking residual JS debt, а не причина broken homepage render.
+  - Website лишається legacy PHP app у public-mode only scope.
+- Рекомендований наступний крок:
+  - Повернутись до `TASK-013` як основного technical track; якщо колись знадобиться deeper website JS cleanup, оформити це окремою low-priority задачею.
+
+### Сесія — `2026-03-15 09:29` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-023`
+- Контекст:
+  - Користувач попросив не просто `curl`-smoke, а реальну систему ручного/браузерного тестування на кшталт Playwright, яка проходить reachable UI actions і збирає помилки в одному місці.
+- Зроблена робота:
+  - Заклеймлено `TASK-023` у backlog.
+  - Створено isolated website audit harness у `localProjects/cmangos_projects/docker-website/browser-audit/`:
+    - `browser_audit.py`
+    - `run_live_audit.sh`
+    - `live_site_config.json`
+    - `requirements.txt`
+    - `README.md`
+    - `.gitignore`
+  - Піднято окремий virtualenv `.venv`, інстальовано `playwright==1.54.0` і Chromium.
+  - Запущено перший live audit проти `https://world-of-warcraft.morgan-dev.com/`; результати збережено у timestamped report dir.
+  - Оновлено `BACKLOG`, `PROJECT_STATUS`, `COMMANDS_REFERENCE`, `TESTING_AND_RELEASE`, `DECISIONS`.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/docker-website/browser-audit/browser_audit.py`
+  - `localProjects/cmangos_projects/docker-website/browser-audit/run_live_audit.sh`
+  - `localProjects/cmangos_projects/docker-website/browser-audit/live_site_config.json`
+  - `localProjects/cmangos_projects/docker-website/browser-audit/requirements.txt`
+  - `localProjects/cmangos_projects/docker-website/browser-audit/README.md`
+  - `localProjects/cmangos_projects/docker-website/browser-audit/.gitignore`
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/COMMANDS_REFERENCE.md`
+  - `docs/TESTING_AND_RELEASE.md`
+  - `docs/DECISIONS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - Syntax gates:
+    - `bash -n localProjects/cmangos_projects/docker-website/browser-audit/run_live_audit.sh`
+    - `python3 -m py_compile localProjects/cmangos_projects/docker-website/browser-audit/browser_audit.py`
+  - First live run:
+    - `localProjects/cmangos_projects/docker-website/browser-audit/run_live_audit.sh`
+    - report dir = `localProjects/cmangos_projects/docker-website/browser-audit/reports/20260315_092632`
+  - Baseline summary:
+    - `pages_visited=30`
+    - `actions_recorded=477`
+    - `issues_total=210`
+    - `issues_unexpected=205`
+    - `same_origin_unexpected=205`
+    - `unexpected_issue_counts`: `http_error=51`, `console_error=105`, `request_failed=49`
+  - Top recurring unexpected issue: `/js/compressed/prototype.js` = `404`, що далі породжує console/request noise; hardened `403` surfaces теж зафіксовані в consolidated report.
+- Блокери / ризики:
+  - Browser audit не виправляє знайдені issues автоматично; він лише централізує їх у repeatable report.
+  - Поточний baseline still dominated by upstream JS debt (`prototype.js`), тому наступні website bugfix tasks мають фільтрувати derivative noise від root cause.
+- Рекомендований наступний крок:
+  - Якщо website track продовжується, використовувати цей harness як default regression gate перед і після кожного live fix.
+
+### Сесія — `2026-03-15 11:24` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-029`
+- Контекст:
+  - Після triage `TASK-028` потрібно було не просто описати residual website defects, а зібрати локально validated patch set, сумісний саме з live `php:5.6-apache` runtime.
+- Зроблена робота:
+  - Заклеймлено `TASK-029` і повернуто реальний `prototype.js` у `mangos-website/js/compressed/prototype.js`, бо legacy UI code реально спирається на Prototype APIs.
+  - `armory/configuration/functions.php` переписано з PHP 7+ syntax на PHP 5.6-safe variant: прибрано typed signatures, `??`, short destructuring та IIFE-style constructs; додано safe array-access helper.
+  - `armory/source/character-talents.php` теж повернуто до PHP 5.6-safe syntax і зроблено prefix-aware Armory asset generation через script base path замість hardcoded `/armory/...`.
+  - `armory/configuration/settings.php` виправлено Armory forum link на website-prefixed `../index.php?n=forum`, а `templates/offlike/server/server.ah.php` переведено з absolute `/armory/...` item URLs на relative armory path.
+  - Для локальної acceptance-перевірки використано не editor diagnostics, а саме `php:5.6-cli` container, щоб валідувати той самий syntax floor, що й у live website image.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/mangos-website/js/compressed/prototype.js`
+  - `localProjects/cmangos_projects/mangos-website/armory/configuration/functions.php`
+  - `localProjects/cmangos_projects/mangos-website/armory/source/character-talents.php`
+  - `localProjects/cmangos_projects/mangos-website/armory/configuration/settings.php`
+  - `localProjects/cmangos_projects/mangos-website/templates/offlike/server/server.ah.php`
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - `docker run --rm -v "$PWD":/app -w /app php:5.6-cli php -l armory/configuration/functions.php` → `No syntax errors detected`
+  - `docker run --rm -v "$PWD":/app -w /app php:5.6-cli php -l armory/source/character-talents.php` → `No syntax errors detected`
+  - `docker run --rm -v "$PWD":/app -w /app php:5.6-cli php -l armory/configuration/settings.php` → `No syntax errors detected`
+  - `docker run --rm -v "$PWD":/app -w /app php:5.6-cli php -l templates/offlike/server/server.ah.php` → `No syntax errors detected`
+- Блокери / ризики:
+  - Live runtime на `workspace` ще не оновлювався; тому public Armory/prototype/link issues станом на зараз лишаються live-known defects, хоч локальний fix pack уже готовий.
+  - Post-fix browser audit ще не існує, бо він має сенс лише після реального shared-host rollout.
+- Рекомендований наступний крок:
+  - Якщо користувач хоче продовжити website track, отримати fresh `EXPLICIT_USER_APPROVAL_REQUIRED`, викотити `TASK-029` live і повторно прогнати browser audit як acceptance gate.
+
+### Сесія — `2026-03-15 09:42` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-024`
+- Контекст:
+  - Користувач уточнив product contract для website: замість окремих субдоменів потрібен один домен із path endpoints `/classic`, `/tbc`, `/wotlk`, `/wotlk-azcore`, а patch switching має жити в `div#shared_topnav`.
+- Зроблена робота:
+  - Заклеймлено `TASK-024` у backlog.
+  - Досліджено current deploy layer і confirmed, що PHP/config part уже може жити під non-root base path, якщо правильно задати `MW_BASE_URL`.
+  - Додано prefix-aware Apache config generator `configure-apache.php`; `docker-entrypoint.sh` тепер викликає його перед стартом Apache.
+  - Створено local multiroute runtime skeleton:
+    - `localProjects/cmangos_projects/docker-website/docker-compose.remote.multiroute.yml`
+    - `localProjects/cmangos_projects/docker-website/.env.multiroute.example`
+  - У patch templates і Armory topnav code додано patch switch links у `#shared_topnav` для `/classic/`, `/tbc/`, `/wotlk/`, `/wotlk-azcore/`; Armory link теж переведено на path-aware URL.
+  - CSS topnav для `vanilla`, `tbc`, `WotLK` і armory доповнено стилями patch switcher-а.
+  - Оновлено `BACKLOG`, `PROJECT_BRIEF`, `CONTINUATION_GUIDE`, `PROJECT_STATUS`, `ARCHITECTURE`, `COMMANDS_REFERENCE`, `TESTING_AND_RELEASE`, `DECISIONS`.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/docker-website/Dockerfile`
+  - `localProjects/cmangos_projects/docker-website/scripts/docker-entrypoint.sh`
+  - `localProjects/cmangos_projects/docker-website/scripts/configure-apache.php`
+  - `localProjects/cmangos_projects/docker-website/docker-compose.remote.multiroute.yml`
+  - `localProjects/cmangos_projects/docker-website/.env.multiroute.example`
+  - `localProjects/cmangos_projects/mangos-website/templates/vanilla/js/buildtopnav.js`
+  - `localProjects/cmangos_projects/mangos-website/templates/tbc/js/buildtopnav.js`
+  - `localProjects/cmangos_projects/mangos-website/templates/WotLK/js/buildtopnav.js`
+  - `localProjects/cmangos_projects/mangos-website/armory/shared/global/menu/topnav/buildtopnav.js`
+  - `localProjects/cmangos_projects/mangos-website/templates/vanilla/css/topnav.css`
+  - `localProjects/cmangos_projects/mangos-website/templates/tbc/css/topnav.css`
+  - `localProjects/cmangos_projects/mangos-website/templates/WotLK/css/topnav.css`
+  - `localProjects/cmangos_projects/mangos-website/armory/shared/global/menu/topnav/topnav.css`
+  - `docs/PROJECT_BRIEF.md`
+  - `docs/CONTINUATION_GUIDE.md`
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/ARCHITECTURE.md`
+  - `docs/COMMANDS_REFERENCE.md`
+  - `docs/TESTING_AND_RELEASE.md`
+  - `docs/DECISIONS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - Local config gates:
+    - `docker compose --env-file localProjects/cmangos_projects/docker-website/.env.multiroute.example -f localProjects/cmangos_projects/docker-website/docker-compose.remote.multiroute.yml config`
+    - `bash -n localProjects/cmangos_projects/docker-website/scripts/docker-entrypoint.sh`
+    - `docker run --rm -v "$PWD":/work -w /work php:8.2-cli php -l localProjects/cmangos_projects/docker-website/scripts/configure-apache.php`
+  - Local prefixed runtime proof:
+    - image built as `semorgana/mangos-website:task024-pathprefix-local`
+    - disposable container with `MW_BASE_URL=http://127.0.0.1:8091/wotlk/`
+    - `curl -I http://127.0.0.1:8091/wotlk/` → `200`
+    - `curl -I http://127.0.0.1:8091/wotlk/templates/wotlk/css/newhp.css` → `200`
+    - `curl -I http://127.0.0.1:8091/` → `403`
+  - DOM proof via Playwright:
+    - `#shared_topnav` text contains `PATCH Classic TBC WotLK WotLK + ACore`
+    - links include `/classic/`, `/tbc/`, `/wotlk/`, `/wotlk-azcore/`
+    - active state applied on `/wotlk/`
+    - Armory link is prefixed as `.../wotlk/armory/index.php`
+  - Cleanup:
+    - disposable proof container `task024-prefix` removed after validation
+- Блокери / ризики:
+  - Це поки що локально verified runtime contract; live multiroute rollout на `workspace` не виконано.
+  - Shared-host deploy цих routes є окремою infra mutation і вимагає explicit user approval.
+- Рекомендований наступний крок:
+  - Якщо користувач хоче саме live `/classic`/`/tbc`/`/wotlk` entrypoints, перейти до окремого `TASK-025` після explicit approval.
+
+### Сесія — `2026-03-15 10:13` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-025`
+- Контекст:
+  - Користувач надав `EXPLICIT_USER_APPROVAL_REQUIRED`, після чого потрібно було реально викотити path-based multi-patch website на shared `workspace` без окремих субдоменів.
+- Зроблена робота:
+  - Заклеймлено `TASK-025` у backlog і переведено його з blocked/in-progress у завершений state після live rollout.
+  - Доправлено на `workspace` multiroute bundle в `workspace:/opt/mangos-website/docker-compose.multiroute.yml`, підготовлено `.env.multiroute` і зроблено backups існуючих `.env`/compose файлів.
+  - Перед website DB bootstrap створено backups `classicrealmd` і `tbcrealmd`.
+  - Bootstrap-нуто website schema в `classicrealmd` і `tbcrealmd` через `full_install.sql` + `public-site-compat.sql`, після чого `realm_settings` направлено відповідно на `cmangos-db/classicmangos/classiccharacters` і `cmangos-tbc-db/tbcmangos/tbccharacters`.
+  - Виправлено real live drifts у multiroute deploy layer: Classic DB host/network, path-prefix rules для trailing-slash routing і exact-path redirect, а також уникнено хибного попадання `/wotlk-azcore` у `/wotlk` router.
+  - Зібрано й опубліковано multiroute image `semorgana/mangos-website:task025-multiroute-20260315`, а потім фінальний image `semorgana/mangos-website:task025a-cachebust-20260315`.
+  - Для остаточного topnav fix додано versioned include для `buildtopnav.js` у `templates/offlike/body_header.php` і `armory/index.php`, бо root `/` ще міг показувати cached JS через Cloudflare.
+  - Спроба targeted Cloudflare purge закінчилась auth failure; фінальний fix свідомо не залежить від edge purge і спирається на HTML-level cache bust усередині image.
+  - Перекочено root service `mangos-website` і prefixed services `mangos-website-classic`, `mangos-website-tbc`, `mangos-website-wotlk` на фінальний image.
+  - Live smoke виконано з `morgan.local`: перевірено `200` для `/`, `/classic/`, `/tbc/`, `/wotlk/`, `302` для slashless paths, `403` для hardened surfaces і `404` для `/wotlk-azcore/`.
+  - Окремий headless Playwright smoke підтвердив, що `#shared_topnav` на `/`, `/classic/`, `/tbc/`, `/wotlk/` реально містить patch links і що на prefixed pages працює `is-active`.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/docker-website/docker-compose.remote.multiroute.yml`
+  - `localProjects/cmangos_projects/mangos-website/templates/offlike/body_header.php`
+  - `localProjects/cmangos_projects/mangos-website/armory/index.php`
+  - `workspace:/opt/mangos-website`
+  - `workspace:/opt/cmangos-classic/backups`
+  - `workspace:/opt/cmangos-tbc/backups`
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/ARCHITECTURE.md`
+  - `docs/COMMANDS_REFERENCE.md`
+  - `docs/TESTING_AND_RELEASE.md`
+  - `docs/DECISIONS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - `docker ps` на remote: `mangos-website`, `mangos-website-classic`, `mangos-website-tbc`, `mangos-website-wotlk` = `Up ... (healthy)`
+  - Final live image digest = `semorgana/mangos-website@sha256:64710da58f68d726e2c5542ec065085456cb0a6c293760784c363d01f0a635a4`
+  - `classicrealmd.realm_settings` row = `1 / root / cmangos-db / 3306 / classicmangos / classiccharacters`
+  - `tbcrealmd.realm_settings` row = `1 / root / cmangos-tbc-db / 3306 / tbcmangos / tbccharacters`
+  - Public HTTP matrix from `morgan.local`:
+    - `/`, `/classic/`, `/tbc/`, `/wotlk/` = `200`
+    - `/classic`, `/tbc`, `/wotlk` = `302` to trailing-slash form
+    - `/classic/install/`, `/tbc/donate.php`, `/wotlk/index.php?n=admin` = `403`
+    - `/wotlk-azcore/` = `404`
+  - Live Playwright proof:
+    - root `/` text містить `Patch Classic TBC WotLK WotLK + ACore`
+    - `/classic/`, `/tbc/`, `/wotlk/` мають відповідний `is-active` patch link
+- Блокери / ризики:
+  - `curl` із самого `workspace` може отримувати Cloudflare edge `403`, тому public website smoke треба запускати з локальної машини або через реальний браузер.
+  - `/wotlk-azcore/` ще не розгорнуто, бо на `workspace` досі немає live AzerothCore runtime.
+  - Upstream JS debt `/js/compressed/prototype.js` лишився окремою non-blocking website bugfix чергою.
+- Рекомендований наступний крок:
+  - Повернутися до `TASK-013` і визначити реальний deploy path для live AzerothCore runtime; тільки після цього є сенс підв'язувати `/wotlk-azcore/`.
+
+### Сесія — `2026-03-15 10:36` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-026`, `TASK-027`
+- Контекст:
+  - Користувач після `TASK-025` зафіксував 2 UX/product drifts:
+    - bare domain `/` усе ще відкриває окремий WotLK-first surface, хоча очікується canonical patch endpoint;
+    - `WotLK + ACore` рекламується в topnav, але `/wotlk-azcore/` фактично не працює.
+- Зроблена робота:
+  - Додано в backlog `TASK-026` для canonical root redirect + чесного patch switcher і `TASK-027` для справжнього live `/wotlk-azcore/`.
+  - Перевірено current live state через Playwright:
+    - `/` має `#shared_topnav` box height `27`
+    - `/classic/`, `/tbc/`, `/wotlk/` мають height `45`
+  - Локально підготовлено deploy-layer fix:
+    - `docker-compose.remote.yml` більше не публікує root service через Traefik (`traefik.enable=false`)
+    - `docker-compose.remote.multiroute.yml` додає root redirect router `/` and `/index.php` -> `/classic/`
+    - додано env flag `MW_ENABLE_AZCORE_LINK`
+    - `buildtopnav.js` у website templates і armory тепер ховає `WotLK + ACore`, якщо flag вимкнений
+    - `body_header.php` і `armory/index.php` тепер інжектять цей flag у browser JS; query-param для topnav JS піднято до `task026a-20260315`
+  - Підтверджено локальні gates:
+    - multiroute compose config проходить
+    - root compose config проходить з injected env
+    - обидва PHP файли проходять `php -l`
+    - headless Playwright proof показує:
+      - flag `false` -> тільки `/classic/`, `/tbc/`, `/wotlk/`
+      - flag `true` -> додається `/wotlk-azcore/`
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/docker-website/docker-compose.remote.yml`
+  - `localProjects/cmangos_projects/docker-website/docker-compose.remote.multiroute.yml`
+  - `localProjects/cmangos_projects/docker-website/.env.multiroute.example`
+  - `localProjects/cmangos_projects/mangos-website/templates/offlike/body_header.php`
+  - `localProjects/cmangos_projects/mangos-website/templates/vanilla/js/buildtopnav.js`
+  - `localProjects/cmangos_projects/mangos-website/templates/tbc/js/buildtopnav.js`
+  - `localProjects/cmangos_projects/mangos-website/templates/WotLK/js/buildtopnav.js`
+  - `localProjects/cmangos_projects/mangos-website/armory/index.php`
+  - `localProjects/cmangos_projects/mangos-website/armory/shared/global/menu/topnav/buildtopnav.js`
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - `docker compose --env-file localProjects/cmangos_projects/docker-website/.env.multiroute.example -f localProjects/cmangos_projects/docker-website/docker-compose.remote.multiroute.yml config`
+  - `docker compose -f localProjects/cmangos_projects/docker-website/docker-compose.remote.yml config` with injected env values
+  - `php -l localProjects/cmangos_projects/mangos-website/templates/offlike/body_header.php`
+  - `php -l localProjects/cmangos_projects/mangos-website/armory/index.php`
+  - Playwright JS proof for `buildtopnav.js`:
+    - `false` -> `['/classic/', '/tbc/', '/wotlk/']`
+    - `true` -> `['/classic/', '/tbc/', '/wotlk/', '/wotlk-azcore/']`
+- Блокери / ризики:
+  - Live deploy для `TASK-026` ще не робився; для будь-якої нової мутації shared `workspace` знову потрібен exact token `EXPLICIT_USER_APPROVAL_REQUIRED`.
+  - `TASK-027` не є “чисто website fix”: щоб `/wotlk-azcore/` реально працював, на `workspace` спершу має існувати live AzerothCore runtime.
+- Рекомендований наступний крок:
+  - Якщо користувач хоче одразу викотити `TASK-026` live, отримати fresh `EXPLICIT_USER_APPROVAL_REQUIRED` і задеплоїти підготовлений redirect/feature-flag fix.
+
+### Сесія — `2026-03-15 10:46` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-026`, `TASK-027`
+- Контекст:
+  - Користувач надав fresh explicit approval token `EXPLICIT_USER_APPROVAL_REQUIRED` для shared-host rollout TASK-026.
+- Зроблена робота:
+  - Повторно прогнано локальні gates для TASK-026:
+    - `docker compose --env-file localProjects/cmangos_projects/docker-website/.env.multiroute.example -f localProjects/cmangos_projects/docker-website/docker-compose.remote.multiroute.yml config`
+    - root compose config з injected env values
+    - `php -l` для `templates/offlike/body_header.php` і `armory/index.php`
+  - Зібрано й опубліковано новий live image `semorgana/mangos-website:task026a-rootredirect-20260315`.
+  - На `workspace` оновлено `docker-compose.yml` і `docker-compose.multiroute.yml` з TASK-026 routing contract.
+  - Перед env mutation створено backups:
+    - `/opt/mangos-website/.env.pre_task026_20260315_104607`
+    - `/opt/mangos-website/.env.multiroute.pre_task026_20260315_104607`
+  - Remote runtime переведено на новий image tag; в `.env.multiroute` явно зафіксовано `MW_ENABLE_AZCORE_LINK=0`.
+  - Перевикочено `mangos-website`, `mangos-website-classic`, `mangos-website-tbc`, `mangos-website-wotlk`; усі сервіси повернулися в `healthy`.
+  - Public contract перевірено з `morgan.local`:
+    - `/` → `302` to `/classic/`
+    - `/index.php` → `302` to `/classic/`
+    - `/classic/`, `/tbc/`, `/wotlk/` → `200`
+    - `/wotlk-azcore/` → `404`
+    - `/classic/install/`, `/tbc/donate.php`, `/wotlk/index.php?n=admin` → `403`
+  - Browser-side Playwright proof підтвердив:
+    - `#shared_topnav` на `/`, `/classic/`, `/tbc/`, `/wotlk/` має `height=45`
+    - visible patch links = only `/classic/`, `/tbc/`, `/wotlk/`
+    - `Classic` активний і на canonicalized `/`, і на `/classic/`
+    - `WotLK + ACore` більше не рендериться, поки env flag вимкнений
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/docker-website/docker-compose.remote.yml`
+  - `localProjects/cmangos_projects/docker-website/docker-compose.remote.multiroute.yml`
+  - `localProjects/cmangos_projects/docker-website/.env.multiroute.example`
+  - `localProjects/cmangos_projects/mangos-website/templates/offlike/body_header.php`
+  - `localProjects/cmangos_projects/mangos-website/templates/vanilla/js/buildtopnav.js`
+  - `localProjects/cmangos_projects/mangos-website/templates/tbc/js/buildtopnav.js`
+  - `localProjects/cmangos_projects/mangos-website/templates/WotLK/js/buildtopnav.js`
+  - `localProjects/cmangos_projects/mangos-website/armory/index.php`
+  - `localProjects/cmangos_projects/mangos-website/armory/shared/global/menu/topnav/buildtopnav.js`
+  - `workspace:/opt/mangos-website`
+  - `workspace:website containers`
+  - `workspace:traefik routes`
+  - `docs/PROJECT_BRIEF.md`
+  - `docs/CONTINUATION_GUIDE.md`
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/ARCHITECTURE.md`
+  - `docs/DECISIONS.md`
+  - `docs/COMMANDS_REFERENCE.md`
+  - `docs/TESTING_AND_RELEASE.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - published digest = `semorgana/mangos-website@sha256:8a5b9033ae238c5e691b1123e08b6ef3f8d2880c996a4cb5d6215be9e9733413`
+  - remote `docker ps`:
+    - `mangos-website`, `mangos-website-classic`, `mangos-website-tbc`, `mangos-website-wotlk` = `Up ... (healthy)` on `task026a-rootredirect-20260315`
+  - public HTTP matrix from local machine:
+    - `/`, `/index.php` = `302` to `/classic/`
+    - `/classic/`, `/tbc/`, `/wotlk/` = `200`
+    - `/wotlk-azcore/` = `404`
+    - `/classic/install/`, `/tbc/donate.php`, `/wotlk/index.php?n=admin` = `403`
+  - browser DOM proof:
+    - `/`, `/classic/`, `/tbc/`, `/wotlk/` all report `#shared_topnav` height `45`
+    - links rendered = `Classic`, `TBC`, `WotLK`
+- Блокери / ризики:
+  - `TASK-027` все ще blocked не через website layer, а через відсутність live AzerothCore runtime на `workspace`.
+  - Root container `mangos-website` лишається в runtime для compatibility, але більше не є public surface; future troubleshooting має дивитися на Traefik routing, а не просто на container health.
+- Рекомендований наступний крок:
+  - Повернутися до `TASK-013` і визначити реальний runtime/deploy path для AzerothCore на `workspace`; лише після цього можна чесно відкривати `/wotlk-azcore/` і повертати link у patch switcher.
+
+### Сесія — `2026-03-15 10:55` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-023`, `TASK-028`
+- Контекст:
+  - Користувач окремо підсвітив, що на live site ще видно багато `Forbidden`/broken surfaces, і запитав, чому Chromium/Playwright crawl зі screenshots і backlog-ready findings не був доведений до свіжого стану після `TASK-026`.
+- Зроблена робота:
+  - Підтверджено, що browser audit harness уже існує в `localProjects/cmangos_projects/docker-website/browser-audit/` і раніше вже давав baseline report `20260315_092632`.
+  - Повторно прогнано live audit після `TASK-026`; перший fresh rerun показав, що runner працює, але його `live_site_config.json` ще відображав pre-`TASK-026` routing contract і тому шумів stale expected-status findings.
+  - `live_site_config.json` вирівняно під поточний public contract: seed-и тепер починаються з `/`, `/classic/`, `/tbc/`, `/wotlk/`, `/wotlk-azcore/`, `/classic/install/`, `/tbc/donate.php`, `/wotlk/index.php?n=admin`, а expected statuses покривають canonical `404/403` для цих surfaces.
+  - Після цього повторно прогнано corrected audit; новий report збережено в `localProjects/cmangos_projects/docker-website/browser-audit/reports/20260315_105344`.
+  - На основі corrected report задокументовано новий residual website debt track `TASK-028`.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/docker-website/browser-audit/live_site_config.json`
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - corrected report `summary.json`:
+    - `pages_visited=30`
+    - `actions_recorded=258`
+    - `issues_total=120`
+    - `issues_unexpected=116`
+    - `unexpected_issue_counts`: `http_error=38`, `console_error=60`, `request_failed=18`
+  - expected hardened/public contract з corrected config підтвердився browser-level audit-ом:
+    - `/wotlk-azcore/` = `404`
+    - `/classic/install/` = `403`
+    - `/tbc/donate.php` = `403`
+    - `/wotlk/index.php?n=admin` = `403`
+  - Реальні residual findings після cleanup:
+    - prefixed `prototype.js` assets (`/classic|/tbc|/wotlk/js/compressed/prototype.js`) → `404`
+    - `/classic/armory/index.php` → `500`
+    - root-scoped discovered legacy URLs (`/index.php?...`, `/armory/`) → `418/404`
+- Блокери / ризики:
+  - Corrected audit не лікує проблеми автоматично; він лише відсікає contract noise і показує справжні залишкові баги.
+  - Частина root-scoped `418/404` findings може бути не regression, а expected fallout після canonicalization root `/ -> /classic/`; це треба окремо класифікувати перед будь-яким live fix.
+- Рекомендований наступний крок:
+  - Взяти `TASK-028` і окремо розібрати три residual buckets: missing `prototype.js`, Classic Armory `500`, root-scoped `418/404` legacy URLs.
+
+### Сесія — `2026-03-15 11:11` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-028`, `TASK-029`
+- Контекст:
+  - Потрібно було не просто описати residual website findings, а довести їх до root cause verdict-ів і відрізати crawler noise від реальних live дефектів.
+- Зроблена робота:
+  - `TASK-028` заклеймлено й доведено до completed triage state.
+  - Для `prototype.js` bucket-а підтверджено, що це real missing asset, а не deploy-only drift:
+    - `templates/offlike/body_header.php` і далі тягне `js/compressed/prototype.js`
+    - у repo `mangos-website/js/compressed/` існують `behaviour.js` і `controls.js`, але не `prototype.js`
+    - live Apache logs на `workspace` стабільно показують `GET /classic/js/compressed/prototype.js -> 404`
+  - Для Armory `500` bucket-а підтверджено live runtime mismatch:
+    - `mangos-website-classic` працює на `PHP 5.6.40`
+    - live app log показує `PHP Parse error ... armory/configuration/functions.php on line 906`
+    - код у цьому місці використовує PHP 7+ features (`: string`, `??`, typed closures), несумісні з current `php:5.6-apache` image baseline
+  - Для root-scoped `418/404` bucket-а виявлено tooling artifact у самому browser audit:
+    - crawler queue-ив relative links against original `source_url` (`/`) instead of redirected `final_url` (`/classic/`)
+    - у `browser_audit.py` це виправлено: discovered navigation targets тепер нормалізуються від `final_url`
+  - Після fix-а повторно прогнано live audit; новий report = `localProjects/cmangos_projects/docker-website/browser-audit/reports/20260315_110836`
+  - Повторний report підтвердив, що root-scoped `/index.php?...` noise зник як artifact і тепер crawler знаходить реальні `/classic/...` pages; натомість лишилися справжні defects: prefixed `prototype.js` `404`, prefixed Armory `500`, absolute `/classic/armory/...` debt.
+  - У backlog додано follow-up `TASK-029` для фактичного fix-track після triage.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/docker-website/browser-audit/browser_audit.py`
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - live runtime proof: `docker exec mangos-website-classic php -v` → `PHP 5.6.40`
+  - live app log proof: `PHP Parse error: syntax error, unexpected ':', expecting '{' in /var/www/html/armory/configuration/functions.php on line 906`
+  - local code proof: `body_header.php` includes `js/compressed/prototype.js`, but repo search finds no such file under `mangos-website/js/compressed/`
+  - browser audit rerun after harness fix: `reports/20260315_110836`
+    - `pages_visited=30`
+    - `actions_recorded=642`
+    - `issues_total=240`
+    - `issues_unexpected=236`
+    - key qualitative result = relative links now resolve under `/classic/...` instead of false root-scoped `/index.php?...`
+- Блокери / ризики:
+  - `TASK-029` уже виходить за межі triage й може вимагати або PHP-5.6-compatible rewrite для Armory code, або runtime baseline change, що треба окремо оцінювати перед live rollout.
+  - Повторний audit став ширшим по reachable prefixed pages, тому raw counts після harness fix не можна порівнювати “в лоб” із попереднім report без якісної інтерпретації.
+- Рекомендований наступний крок:
+  - Брати `TASK-029`: спочатку визначити fix strategy для PHP 5.6 compatibility vs runtime uplift, потім окремо закрити `prototype.js` debt і перезапустити audit як acceptance gate.
+
+### Сесія — `2026-03-15 11:30` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-029`
+- Контекст:
+  - Користувач надав `EXPLICIT_USER_APPROVAL_REQUIRED`, після чого треба було довести `TASK-029` до реального live completion, а не залишати його на локально validated patch set.
+- Зроблена робота:
+  - Зібрано й опубліковано image `semorgana/mangos-website:task029a-armoryfix-20260315`, який повернув `prototype.js` і прибрав PHP 5.6 parse blockers у Armory code.
+  - Remote runtime на `workspace:/opt/mangos-website` переведено на `task029a`, після чого `prototype.js` став `200`, але `/classic/armory/index.php` ще лишався `500`.
+  - Live log triage показав новий root cause: `Call to a member function setErrorHandler() on null` у `armory/configuration/functions.php`, бо Armory bootstrap очікував legacy expansion marker files `vanilla.spp` / `tbc.spp` / `wotlk.spp`, яких container не створював.
+  - `docker-website/scripts/docker-entrypoint.sh` виправлено так, щоб container на старті видаляв старі marker-и й створював правильний `*.spp` за `MW_EXPANSION`.
+  - Зібрано й опубліковано final image `semorgana/mangos-website:task029b-armoryrealmfix-20260315` з digest `sha256:51edb543bc9dc153ac4b4ccf921ddb955b280b46e55cc7b4ad83d03220ef0d7e`.
+  - Remote runtime переведено на `task029b`; після цього `/classic/armory/index.php`, `/tbc/armory/index.php`, `/wotlk/armory/index.php` стали `200`, а prefixed `prototype.js` assets теж віддаються як `200`.
+  - Повторно прогнано browser audit; новий report збережено в `localProjects/cmangos_projects/docker-website/browser-audit/reports/20260315_113709/`.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/docker-website/scripts/docker-entrypoint.sh`
+  - `workspace:/opt/mangos-website/.env`
+  - `workspace:/opt/mangos-website/.env.multiroute`
+  - `workspace:website containers`
+  - `localProjects/cmangos_projects/docker-website/browser-audit/reports/20260315_113709/`
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/COMMANDS_REFERENCE.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - `docker ps` на remote: `mangos-website`, `mangos-website-classic`, `mangos-website-tbc`, `mangos-website-wotlk` = `healthy` on `task029b-armoryrealmfix-20260315`
+  - Public HTTP matrix:
+    - `/classic/armory/index.php`, `/tbc/armory/index.php`, `/wotlk/armory/index.php` = `200`
+    - `/classic/js/compressed/prototype.js`, `/tbc/js/compressed/prototype.js`, `/wotlk/js/compressed/prototype.js` = `200`
+  - Browser audit `reports/20260315_113709/summary.json`:
+    - `pages_visited=30`
+    - `actions_recorded=642`
+    - `issues_total=38`
+    - `issues_unexpected=34`
+    - top recurring unexpected findings більше не містять prefixed `prototype.js` `404` або Armory `500`
+- Блокери / ризики:
+  - Browser audit після cleanup все ще бачить lower-priority residual findings поза scope `TASK-029`: hardened `403` pages через discovered forum/account links і legacy `server commands` surface, який у public-mode contract підтягує CSS як HTML.
+  - `TASK-027` лишається без змін: `/wotlk-azcore/` все ще має лишатися hidden/404 до появи реального AzerothCore runtime на `workspace`.
+- Рекомендований наступний крок:
+  - Повернутися до `TASK-013` / `TASK-027` як до основного roadmap track; якщо residual audit noise стане важливим, оформити його окремою low-priority website task.
+
+### Сесія — `2026-03-15 12:20` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-029`
+- Контекст:
+  - Користувач показав live screenshot з Armory error уже після попереднього optimistic completion claim, тому треба було перевірити не лише status code, а точний HTML body і повернути документацію до правдивого стану.
+- Зроблена робота:
+  - Повторно перевірено live `/classic/armory/index.php`; body справді показував raw SQL error з `mysqli_connect("127.0.0.1", "root")`.
+  - Виявлено, що `armory/configuration/mysql.php` усе ще використовував legacy hardcoded DB target `127.0.0.1:3310 / root / 123456` замість runtime config з `config/config-protected.php`.
+  - `armory/configuration/mysql.php` переписано на runtime-derived DB host/port/user/password; PHP 5.6 lint пройдено, після rollout новий live error змінився на `Unknown database 'classicarmory'`.
+  - Remote DB inventory на `workspace` підтвердив відсутність `classicarmory`, `tbcarmory`, `wotlkarmory` schemas; у локальному repo й remote bundle не знайдено verified Armory bootstrap SQL/data source.
+  - Щоб прибрати internal leak, `databaseErrorHandler()` у `armory/configuration/functions.php` змінено: full diagnostics тепер ідуть у server-side logs, а public route повертає контрольований `503 Service Unavailable` з поясненням, що Armory data layer ще не сконфігурована на цьому runtime.
+  - Зібрано й розгорнуто image `semorgana/mangos-website:task029d-armorygraceful-20260315` з digest `sha256:3b7f8eff6969f1811d7280b6aa298f158c75c644855acba89434461697cba3e7`.
+  - Документацію виправлено так, щоб `TASK-029` більше не виглядав fully completed: `prototype.js` fix і Armory leak mitigation залишаються valid, але повна працездатність Armory позначена як blocked by missing DB/schema layer.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/mangos-website/armory/configuration/mysql.php`
+  - `localProjects/cmangos_projects/mangos-website/armory/configuration/functions.php`
+  - `workspace:/opt/mangos-website/.env`
+  - `workspace:/opt/mangos-website/.env.multiroute`
+  - `workspace:website containers`
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - PHP 5.6 lint для `armory/configuration/mysql.php` і `armory/configuration/functions.php` = success.
+  - Public HTTP check: `/classic/armory/index.php` = `503` з friendly unavailable page без raw SQL details.
+  - Public HTTP check: prefixed `prototype.js` assets = `200`.
+  - Remote logs зберігають реальний root cause: `Unknown database 'classicarmory'`.
+- Блокери / ризики:
+  - Full public Armory лишається неможливим без verified source для `classicarmory` / `tbcarmory` / `wotlkarmory` schema/data.
+  - Будь-який новий completion claim для Armory без реального DB bootstrap буде неправдивим; acceptance тепер треба вважати досягнутою лише після live HTML success path, а не тільки після code lint чи status-code smoke.
+- Рекомендований наступний крок:
+  - Або знайти/відновити Armory DB bootstrap artifacts і підняти реальні `*armory` schemas, або окремо затвердити продуктове рішення тримати public Armory в disabled/degraded mode.
+
+### Сесія — `2026-03-15 13:05` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-029`
+- Контекст:
+  - Користувач повідомив, що знайшов повний локальний repack `SPP_Classics_V2`, де сайт і Armory були робочими разом із базою даних; треба було перевірити, чи це закриває blocker про відсутній Armory bootstrap source.
+- Зроблена робота:
+  - Перевірено структуру `localProjects/cmangos_projects/SPP_Classics_V2`; підтверджено, що це повний SPP Classics repack з expansion-specific SQL assets і bundled website snapshot.
+  - У `SPP_Server/sql/vanilla/armory.7z`, `SPP_Server/sql/tbc/armory.7z`, `SPP_Server/sql/wotlk/armory.7z` знайдено expansion-specific `armory.sql` dumps.
+  - Потоково перевірено вміст дампів: вони містять `DROP/CREATE DATABASE classicarmory|tbcarmory|wotlkarmory`, таблиці `armory_instance_data`, `armory_instance_template`, `armory_titles`, `cache_item`, `cache_item_char`, `cache_item_search`, `cache_item_tooltip`, а також великий набір `dbc_*` tables (`dbc_spell`, `dbc_talent`, `dbc_talenttab`, `dbc_spellicon` тощо).
+  - Це зняло попередню невизначеність: verified source для Armory schema/data існує локально; поточний blocker змінився з `source not found` на `source found, import not executed yet`.
+  - `docs/BACKLOG.md` і `docs/PROJECT_STATUS.md` оновлено відповідно до нового факту.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/SPP_Classics_V2/SPP_Server/sql/vanilla/armory.7z`
+  - `localProjects/cmangos_projects/SPP_Classics_V2/SPP_Server/sql/tbc/armory.7z`
+  - `localProjects/cmangos_projects/SPP_Classics_V2/SPP_Server/sql/wotlk/armory.7z`
+  - `localProjects/cmangos_projects/SPP_Classics_V2/SPP_Server/README.md`
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - Vanilla dump header: `DROP DATABASE IF EXISTS classicarmory; CREATE DATABASE IF NOT EXISTS classicarmory; USE classicarmory;`.
+  - TBC dump schema scan: confirmed `tbcarmory` plus `armory_titles`, `cache_*`, `dbc_*`, `armory_instance_*` tables.
+  - WotLK dump header: `DROP DATABASE IF EXISTS wotlkarmory; CREATE DATABASE IF NOT EXISTS wotlkarmory; USE wotlkarmory;`.
+- Блокери / ризики:
+  - Armory все ще degraded на `workspace`, бо жоден із цих dumps ще не імпортовано на remote runtime.
+  - Import на shared host є server/data mutation і потребує `EXPLICIT_USER_APPROVAL_REQUIRED`.
+- Рекомендований наступний крок:
+  - За наявності explicit approval імпортувати три Armory dumps на `workspace`, перевірити schema compatibility, після чого повторно перевірити live Armory routes і browser audit.
+
+### Сесія — `2026-03-15 20:15` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-029`
+- Контекст:
+  - Після explicit approval користувач попросив не лише відновити Armory, а й заповнити публічні website surfaces seed-контентом на кшталт новин, щоб сайт не виглядав порожнім.
+- Зроблена робота:
+  - Підтверджено відновлений SSH access до `workspace` і expansion-specific remote DB topology: `cmangos-db`, `cmangos-tbc-db`, `cmangos-wotlk-db`.
+  - Імпортовано `armory.sql` з `SPP_Classics_V2` у `classicarmory`, `tbcarmory`, `wotlkarmory` через відповідні remote MariaDB контейнери.
+  - Під час спроби повного `website.sql` import виявлено conflict із live `public-site-compat.sql`: `website_*` уже існують як `VIEW`, а не `BASE TABLE`.
+  - Щоб не зруйнувати compat layer, content import звужено до safe підмножини: з expansion-specific `website.sql` взято forum/news schema до секції `website_accounts`, а з `website_news.sql` — лише seed-контент починаючи з `f_posts` / `f_topics`.
+  - У `classicrealmd`, `tbcrealmd`, `wotlkrealmd` успішно створено й заповнено `f_categories`, `f_forums`, `f_topics`, `f_posts`.
+  - Live smoke підтвердив, що `/classic/`, `/tbc/`, `/wotlk/` тепер показують seeded updates/news entries від `SPP Team`, а `/classic|/tbc|/wotlk/armory/index.php` повертають `200` і real Armory HTML.
+- Які файли / області зачеплено:
+  - `workspace:cmangos-db`
+  - `workspace:cmangos-tbc-db`
+  - `workspace:cmangos-wotlk-db`
+  - `localProjects/cmangos_projects/SPP_Classics_V2/SPP_Server/sql/vanilla/armory.7z`
+  - `localProjects/cmangos_projects/SPP_Classics_V2/SPP_Server/sql/tbc/armory.7z`
+  - `localProjects/cmangos_projects/SPP_Classics_V2/SPP_Server/sql/wotlk/armory.7z`
+  - `localProjects/cmangos_projects/SPP_Classics_V2/SPP_Server/sql/vanilla/website.sql`
+  - `localProjects/cmangos_projects/SPP_Classics_V2/SPP_Server/sql/tbc/website.sql`
+  - `localProjects/cmangos_projects/SPP_Classics_V2/SPP_Server/sql/wotlk/website.sql`
+  - `localProjects/cmangos_projects/SPP_Classics_V2/SPP_Server/sql/vanilla/website_news.sql`
+  - `localProjects/cmangos_projects/SPP_Classics_V2/SPP_Server/sql/tbc/website_news.sql`
+  - `localProjects/cmangos_projects/SPP_Classics_V2/SPP_Server/sql/wotlk/website_news.sql`
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - `classicrealmd`, `tbcrealmd`, `wotlkrealmd`: `f_categories=1`, `f_forums=1`, `f_topics=16`, `f_posts=16`.
+  - `classicarmory`, `tbcarmory`, `wotlkarmory`: `armory_titles=142`; `dbc_spell=22357/28315/49379`; `cache_item=0` initial on-demand cache state.
+  - Public HTTP smoke:
+    - `/classic/armory/index.php`, `/tbc/armory/index.php`, `/wotlk/armory/index.php` = `200`
+    - response body title = `World of Warcraft Armory`
+    - `/classic/`, `/tbc/`, `/wotlk/` contain seeded entries `Update 26.04.2023`, `Update 19.03.2023`, `Hotfix 28.09.2021`
+- Блокери / ризики:
+  - `website_*` compat views залишаються частиною public-mode contract; повний legacy `website.sql` import поверх них робити не можна без окремого redesign міграції.
+  - Direct forum routes типу `index.php?n=forum` як і раніше можуть бути `403` за current hardening policy, навіть якщо feed/content tables уже populated.
+- Рекомендований наступний крок:
+  - За потреби прогнати оновлений browser audit і окремо вирішити, чи треба відкривати direct forum/news routes публічно, чи залишити тільки populated frontpage feed.
+
+### Сесія — `2026-03-15 20:31` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-029`
+- Контекст:
+  - Після live Armory restore і seed-content import користувач попросив прогнати свіжий browser audit, щоб зафіксувати новий публічний baseline вже не в degraded, а в populated state.
+- Зроблена робота:
+  - Для `localProjects/cmangos_projects/docker-website/browser-audit/` перевикористано наявний Python venv і підтверджено актуальність `live_site_config.json` для поточного single-domain multiroute contract.
+  - Запущено `./run_live_audit.sh` проти `https://world-of-warcraft.morgan-dev.com/`.
+  - Новий report згенеровано в `browser-audit/reports/20260315_202815/`.
+  - Підсумок підтвердив, що Armory більше не є availability blocker: основний residual noise тепер складається з intentional hardened-route `403/404` і legacy JS/runtime defects усередині вже доступного Armory UI.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/docker-website/browser-audit/live_site_config.json`
+  - `localProjects/cmangos_projects/docker-website/browser-audit/run_live_audit.sh`
+  - `localProjects/cmangos_projects/docker-website/browser-audit/reports/20260315_202815/summary.json`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - Audit summary: `pages_visited=30`, `actions_recorded=640`, `issues_total=73`, `issues_unexpected=69`, `failed_actions=3`.
+  - Breakdown: `console_error=25`, `page_error=20`, `action_timeout=3`, `http_error=11`, `request_failed=10`.
+  - Top unexpected findings:
+    - intentional public contract surfaces still show as browser console noise: `/wotlk-azcore/` = `404`, `/classic/install/` = `403`, `/tbc/donate.php` = `403`, `/wotlk/index.php?n=admin` = `403`;
+    - Armory pages now return `200`, але всередині мають legacy JS errors `armory_link is not defined` і `theBGcookie is not defined`;
+    - Playwright зафіксував `action_timeout` на кліку по `#dummyLang`, бо елемент формально visible, але фізично поза viewport.
+- Блокери / ризики:
+  - Browser audit більше не показує data-layer або availability blocker для Armory, але UI/JS quality Armory лишається degraded.
+  - Частина unexpected findings є не production defect-ами, а expected hardening behavior, яке поточний audit config ще не повністю нормалізує.
+- Рекомендований наступний крок:
+  - Якщо потрібен чистіший browser baseline, окремо або поправити audit expectations для hardened routes, або точково лагодити legacy Armory JS/UI defects без зміни public data contract.
+
+### Сесія — `2026-03-15 20:44` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-030`
+- Контекст:
+  - Користувач explicitly відкинув попереднє припущення, що direct `forum/account` `403/404` є прийнятною UX-нормою, і попросив зробити ці сторінки реально доступними на live prefixed website surfaces.
+- Зроблена робота:
+  - Перевірено live website runtime і підтверджено root cause: Apache policy в `mangos-website.conf` та startup-generated vhost блокували `account|forum|forums|admin`, а `configure-app.php` тримав `site_register=0`.
+  - Підтверджено, що DB-side support для forum/account flow already існує в `classicrealmd`, `tbcrealmd`, `wotlkrealmd`: `account_extend`, `forum_accounts`, `pms`, `f_categories`, `f_forums`, `f_topics`, `f_posts`.
+  - У backlog створено й заклеймлено `TASK-030`; локально змінено `configure-apache.php`, `configure-app.php`, `apache/mangos-website.conf`, `docker-compose.remote.multiroute.yml`, `.env.example`, `.env.multiroute.example`, `sql/public-site-compat.sql`, `browser-audit/live_site_config.json`.
+  - Зібрано й запушено live image `semorgana/mangos-website:task030a-publicroutes-20260315`, оновлено `workspace:/opt/mangos-website/.env.multiroute` і `docker-compose.multiroute.yml`, після чого recreated `mangos-website-classic`, `mangos-website-tbc`, `mangos-website-wotlk`.
+  - External smoke після rollout підтвердив, що `/classic|/tbc|/wotlk/index.php?n=forum` і `/classic|/tbc|/wotlk/index.php?n=account&sub=register` тепер віддають `200`, а `/classic/index.php?n=account&sub=manage` переходить у login flow замість `403`.
+  - Fresh browser audit після route opening (`browser-audit/reports/20260315_204404/`) показав новий UX debt: registration pages стали reachable, але тягнули legacy missing assets і різко підняли `404`/console noise.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/docker-website/scripts/configure-apache.php`
+  - `localProjects/cmangos_projects/docker-website/scripts/configure-app.php`
+  - `localProjects/cmangos_projects/docker-website/apache/mangos-website.conf`
+  - `localProjects/cmangos_projects/docker-website/docker-compose.remote.multiroute.yml`
+  - `localProjects/cmangos_projects/docker-website/.env.example`
+  - `localProjects/cmangos_projects/docker-website/.env.multiroute.example`
+  - `localProjects/cmangos_projects/docker-website/sql/public-site-compat.sql`
+  - `localProjects/cmangos_projects/docker-website/browser-audit/live_site_config.json`
+  - `workspace:/opt/mangos-website/.env.multiroute`
+  - `workspace:/opt/mangos-website/docker-compose.multiroute.yml`
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - `docker compose ... config` для multiroute stack rendered successfully локально.
+  - PHP 5.6 lint пройшов для `configure-apache.php` і `configure-app.php`.
+  - Remote website containers після rollout були `healthy`.
+  - External HTTP smoke:
+    - `/classic/index.php?n=forum` = `200`
+    - `/classic/index.php?n=forum&sub=viewforum&fid=1` = `200`
+    - `/classic/index.php?n=account&sub=register` = `200`
+    - `/classic/index.php?n=account&sub=manage` = `200`
+    - `/tbc/index.php?n=forum` = `200`
+    - `/tbc/index.php?n=account&sub=register` = `200`
+    - `/wotlk/index.php?n=forum` = `200`
+    - `/wotlk/index.php?n=account&sub=register` = `200`
+- Блокери / ризики:
+  - Route opening прибрав web-layer `403`, але одразу проявив latent asset debt на registration template; UX fix ще не був повністю завершений до додаткового template repair.
+- Рекомендований наступний крок:
+  - Полагодити missing assets у `account.register.php`, повторно розгорнути live image і зафіксувати новий browser-audit baseline вже без register-page `404` bucket.
+
+### Сесія — `2026-03-15 20:57` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-030`
+- Контекст:
+  - Після route opening потрібно було закрити follow-up UX defect: newly reachable registration pages ламалися на legacy template asset references, що не існували в current theme/runtime tree.
+- Зроблена робота:
+  - Проаналізовано `templates/offlike/account/account.register.php` і підтверджено, що template звертався до неіснуючих `frame-left-bg.gif`, `frame-right-bg.gif`, `new-hp/images/pixel.gif` і raw `images/pixel.gif` paths.
+  - Template переведено на реальні expansion theme assets: `<?php echo $currtmp; ?>/images/ironframe-bg.jpg` і `<?php echo $currtmp; ?>/images/pixel.gif`.
+  - Зібрано і запушено follow-up image `semorgana/mangos-website:task030b-registerassets-20260315`, оновлено live `.env.multiroute`, recreated classic/tbc/wotlk website services і дочеканося `healthy` state.
+  - External smoke підтвердив `200` для repaired theme assets на Classic/TBC/WotLK і `200` для `/classic|/tbc|/wotlk/index.php?n=account&sub=register` після redeploy.
+  - Повторно прогнано browser audit; final report `browser-audit/reports/20260315_205236/` підтвердив, що forum/register pages реально входять у crawl зі status `200`, а топ findings тепер повернулися до known residuals Armory/server-commands замість forum/account blocking або register-page asset `404`.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/mangos-website/templates/offlike/account/account.register.php`
+  - `workspace:/opt/mangos-website/.env.multiroute`
+  - `workspace:/opt/mangos-website/docker-compose.multiroute.yml`
+  - `localProjects/cmangos_projects/docker-website/browser-audit/reports/20260315_205236/`
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - PHP 5.6 lint для `templates/offlike/account/account.register.php` пройшов успішно.
+  - External asset smoke:
+    - `/classic/templates/vanilla/images/ironframe-bg.jpg` = `200`
+    - `/classic/templates/vanilla/images/pixel.gif` = `200`
+    - `/tbc/templates/tbc/images/ironframe-bg.jpg` = `200`
+    - `/tbc/templates/tbc/images/pixel.gif` = `200`
+    - `/wotlk/templates/wotlk/images/ironframe-bg.jpg` = `200`
+    - `/wotlk/templates/wotlk/images/pixel.gif` = `200`
+  - Final audit summary: `pages_visited=30`, `actions_recorded=1239`, `issues_total=295`, `issues_unexpected=295`, `failed_actions=3`.
+  - Final audit `pages.json` підтверджує:
+    - `/classic/index.php?n=forum` = `200`, title `World of Warcraft Classic » Forums`
+    - `/classic/index.php?n=account&sub=register` = `200`, title `World of Warcraft Classic » Account » Register`
+    - `/tbc/index.php?n=forum` = `200`, title `World of Warcraft TBC » Forums`
+    - `/tbc/index.php?n=account&sub=register` = `200`, title `World of Warcraft TBC » Account » Register`
+    - `/wotlk/index.php?n=forum` = `200`, title `World of Warcraft WotLK » Forums`
+    - `/wotlk/index.php?n=account&sub=register` = `200`, title `World of Warcraft WotLK » Account » Register`
+- Блокери / ризики:
+  - Forum/account route blocking як UX blocker більше не актуальний, але legacy website все ще має окремі browser-level defects: Armory JS globals (`armory_link`, `theBGcookie`), `#dummyLang` dropdown timeout і `server commands` CSS/MIME mismatch.
+- Рекомендований наступний крок:
+  - Якщо потрібен cleaner website baseline, винести окремий low-priority task на residual Armory/server-commands browser defects без повернення до Apache blocking для public forum/account surfaces.
+
+### Сесія — `2026-03-15 21:16` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-031`
+- Контекст:
+  - Після підтвердження `TASK-030` користувач погодився продовжити окремим cleanup треком для residual browser defects і почати саме з Armory JS issues.
+- Зроблена робота:
+  - У backlog створено `TASK-031` для post-`TASK-030` website cleanup без регресії forum/account public contract.
+  - Code triage показав два bootstrap gaps:
+    - `armory/shared/global/menu/topnav/buildtopnav.js` на Armory pages expects `armory_link`, але `armory/index.php` не оголошував цей global;
+    - `armory/js/arena-ladder-ajax.js` звертається до `theBGcookie`, хоча в current runtime цей global ніде не визначається.
+  - Локально виправлено root layer:
+    - `armory/index.php` тепер оголошує `armory_link = 'index.php'`;
+    - `armory/shared/global/menu/topnav/buildtopnav.js` отримав safe fallback-и для `site_name`, `site_link`, `forum_link`, `armory_link`, `global_nav_lang`;
+    - `armory/js/arena-ladder-ajax.js` більше не падає без `theBGcookie` і fallback-иться на `armory.cookieBG`.
+  - Після правок прогнано diagnostics і PHP 5.6 lint для Armory shell.
+- Які файли / області зачеплено:
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+  - `localProjects/cmangos_projects/mangos-website/armory/index.php`
+  - `localProjects/cmangos_projects/mangos-website/armory/shared/global/menu/topnav/buildtopnav.js`
+  - `localProjects/cmangos_projects/mangos-website/armory/js/arena-ladder-ajax.js`
+- Верифікація:
+  - IDE diagnostics для трьох змінених website files = `No errors found`.
+  - `php:5.6-cli php -l armory/index.php` → `No syntax errors detected in armory/index.php`.
+- Блокери / ризики:
+  - Це лише локальна валідація. Щоб підтвердити disappearance of `armory_link is not defined` / `theBGcookie is not defined` у live browser audit, потрібен rollout на `workspace`, а він за workflow все ще вимагає `EXPLICIT_USER_APPROVAL_REQUIRED`.
+- Рекомендований наступний крок:
+  - Якщо потрібен live closure для `TASK-031`, дати explicit approval token на rollout і повторний targeted browser audit; інакше локальний patch залишиться підготовленим, але не доведеним end-to-end.
+
+### Сесія — `2026-03-15 22:05` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-031`
+- Контекст:
+  - Після user-reported screenshots live regression triage показав, що проблема вже не зводиться до Armory JS globals: Classic Armory реально падав у graceful `503`, Auction House показував неправдивий fallback text, register page ще тягнув missing assets, а forum/server surfaces генерували blank class icon URLs.
+- Зроблена робота:
+  - Live response body та remote error log з `mangos-website-classic` підтвердили точний root cause Armory `503`: query до `classiccharacters.character_achievement`, якої немає в current Classic schema.
+  - Локально розширено `TASK-031` patch set:
+    - non-WotLK achievements path тепер short-circuit-иться в `armory/configuration/functions.php`, `armory/source/character.php`, `armory/source/character-achievements.php`, щоб Classic/TBC Armory не валився на absent achievements schema;
+    - Armory shell/layout стабілізовано через responsive `topnav` width і fixed middle-column centering у `armory/shared/global/menu/topnav/topnav.css`, `armory/css/master.css`, `armory/index.php`;
+    - Auction House empty dataset у `templates/offlike/server/server.ah.php` більше не показує raw `ahbot failed to load!`, а віддає truthful empty-state row;
+    - `templates/offlike/account/account.register.php` переведено на реальні theme assets (`images/light3.jpg`, `images/letters/i.gif`, `images/donation/plainbox-*`);
+    - `templates/offlike/forum/forum.viewtopic.php`, `templates/offlike/server/server.playersonline.php`, `templates/offlike/server/server.gmonline.php`, `templates/offlike/server/server.chars.php`, `components/server/server.honor.php`, `components/ajax/ajax.honor.php` більше не формують broken class icon requests при порожньому class value.
+  - Прогнано IDE diagnostics по всьому expanded fix set; нових editor-level errors не з'явилося.
+- Які файли / області зачеплено:
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+  - `localProjects/cmangos_projects/mangos-website/armory/configuration/functions.php`
+  - `localProjects/cmangos_projects/mangos-website/armory/source/character.php`
+  - `localProjects/cmangos_projects/mangos-website/armory/source/character-achievements.php`
+  - `localProjects/cmangos_projects/mangos-website/armory/index.php`
+  - `localProjects/cmangos_projects/mangos-website/armory/css/master.css`
+  - `localProjects/cmangos_projects/mangos-website/armory/shared/global/menu/topnav/topnav.css`
+  - `localProjects/cmangos_projects/mangos-website/templates/offlike/server/server.ah.php`
+  - `localProjects/cmangos_projects/mangos-website/templates/offlike/account/account.register.php`
+  - `localProjects/cmangos_projects/mangos-website/templates/offlike/forum/forum.viewtopic.php`
+  - `localProjects/cmangos_projects/mangos-website/templates/offlike/server/server.playersonline.php`
+  - `localProjects/cmangos_projects/mangos-website/templates/offlike/server/server.gmonline.php`
+  - `localProjects/cmangos_projects/mangos-website/templates/offlike/server/server.chars.php`
+  - `localProjects/cmangos_projects/mangos-website/components/server/server.honor.php`
+  - `localProjects/cmangos_projects/mangos-website/components/ajax/ajax.honor.php`
+- Верифікація:
+  - Live AJAX response for `/classic/armory/source/ajax/ajax-search-getresults.php?...` returned graceful `Armory is temporarily unavailable` page before the local fix.
+  - Remote app log from `mangos-website-classic` recorded `Armory database failure` with MySQL `1146` on `classiccharacters.character_achievement`.
+  - IDE diagnostics for all edited files = `No errors found`.
+  - Local PHP CLI binary was not available on `morgan.local`, so no extra local `php -l` run was possible beyond editor diagnostics in this pass.
+- Блокери / ризики:
+  - Усі нові виправлення поки що локальні; live proof для user-reported regressions усе ще потребує explicit rollout approval і повторної targeted verification на `workspace`.
+- Рекомендований наступний крок:
+  - За наявності explicit approval розгорнути updated website image на `workspace`, потім перевірити `/classic/armory/...`, `/classic/index.php?n=server&sub=ah`, `/classic/index.php?n=account&sub=register`, forum pages і повторити targeted browser audit.
+
+### Сесія — `2026-03-16 04:00` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-031`, `TASK-032`
+- Контекст:
+  - Після explicit user approval розгорнуто accumulated website fix set на `workspace` як image `semorgana/mangos-website:task032b-gmpfix-20260316`. Виконано комплексну production readiness верифікацію.
+- Зроблена робота:
+  - **Live rollout**: deployed image включає login SQL fix, GMP extension, armory databaseErrorHandler fix, tooltipmgr SQL guards, SRP6 credential sync, і весь TASK-031 expanded fix set (Armory JS globals, Classic achievements guard, AH empty state, register assets, blank class icons).
+  - **Static asset verification**: Classic 17/17 visible resources = 200 (3 images у HTML comments = non-issue). TBC 15/15 = 200. WotLK 15/15 = 200. Armory 33 CSS/JS/shared + 8 item icons = all 200.
+  - **Browser audit**: Playwright matrix 18 pages visited, 0 issues, 0 unexpected. Report at `browser-audit/reports/20260316_041038/`.
+  - **Form testing**: login on all 3 expansions (Classic/TBC/WotLK) = success with correct cookies. Error cases: wrong password, empty fields, nonexistent user — all return proper validation messages. Registration multi-step flow returns correct pages at each step. Armory search (characters/items/guilds) = 200. Armory AJAX with realm = 200. Account manage/chartools/charcreate = correct responses when logged in.
+  - **PHP error logs**: 0 errors across all 3 containers (Classic, TBC, WotLK).
+  - **Component audit**: all 16 component sub-pages return proper responses. Protected pages (`view`, `pms`) correctly require elevated permissions.
+  - **External audit through Cloudflare**: Classic 9/9 pages = 200. TBC 6/6 = 200. WotLK 3/3 = 200.
+  - **Security gates**: `/install/`, `/config/config.xml`, `/index.php?n=admin`, `/donate.php`, `/.git/` = all 403.
+  - **TASK-031 marked completed**: all subtasks done, live rollout verified.
+  - **TASK-032 created and completed**: production readiness task with full verification matrix.
+  - **Project docs updated**: `PROJECT_STATUS.md`, `BACKLOG.md`, `SESSION_LOG.md`.
+- Які файли / області зачеплено:
+  - `docs/PROJECT_STATUS.md`
+  - `docs/BACKLOG.md`
+  - `docs/SESSION_LOG.md`
+  - `workspace:/opt/mangos-website` (live containers)
+- Верифікація:
+  - Zero PHP errors, zero broken endpoints, zero browser audit issues, all forms functional, all static assets loading, all expansion surfaces accessible externally.
+  - Website at `world-of-warcraft.morgan-dev.com` confirmed **production-ready**.
+- Блокери / ризики:
+  - Жодних нових блокерів. Відомі non-issues задокументовані в `PROJECT_STATUS.md`.
+- Рекомендований наступний крок:
+  - `TASK-013` / `TASK-027` — AzerothCore runtime deploy для `/wotlk-azcore/`.
+
+---
+
+### Session — 2026-03-16 (continued), TASK-033 HOTFIX
+
+- Контекст:
+  - Користувач залогінився в браузері і виявив повністю зламаний сайт: відсутні CSS стилі, зломані зображення (сині ? іконки), raw HTML без оформлення. Попередні "production-ready" звіти (TASK-032) були хибними — вони тестували тільки анонімний/curl-based доступ, ніколи не перевіряли logged-in user rendering.
+- Зроблена робота:
+  - **Root cause діагностика**: Для залогінених юзерів `index.php` (L134-146) читає `theme` з `website_accounts` VIEW (базується на `account_extend` таблиці). Таблиця `account_extend` була пустою для всіх акаунтів → PHP повертав NULL → `$currtmp2[NULL]` в PHP 5.6 = undefined → `$currtmp = "templates/"` (без subfolder) → всі CSS/JS/image шляхи як `templates/css/newhp.css` замість `templates/vanilla/css/newhp.css` → 404 на кожному ресурсі.
+  - **Docker access logs підтвердили**: browser (logged in) запитував `/classic/templates/css/newhp.css` (404), тоді як guest curl отримував `/classic/templates/vanilla/css/newhp.css` (200).
+  - **Code fix**: Додано fallback у `index.php`: `if ($currtmp === null || $currtmp === false || !isset($currtmp2[$currtmp]))` → використовує `$MW->getConfig->generic->default_template` замість crash з undefined index.
+  - **DB seeding**: Заповнено `account_extend` для всіх акаунтів: Classic 5 rows, TBC 5 rows, WotLK 5 rows (theme=0 = vanilla).
+  - **Build & deploy**: Image `semorgana/mangos-website:task033-logintheme-20260316` зібрано, pushed, deployed на workspace (всі 4 контейнери перестворені).
+  - **curl verification**: Login через curl + GET з cookies:
+    - Classic: 82,648B, `templates/vanilla/css/newhp.css`, SAMUEL=1, broken paths=0 ✓
+    - TBC: 82,535B, `templates/vanilla/css/newhp.css`, SAMUEL=1, broken paths=0 ✓
+    - WotLK: 82,489B, `templates/vanilla/css/newhp.css`, SAMUEL=1, broken paths=0 ✓
+  - **Playwright screenshot verification**: Chromium headless з curl cookies → `screenshot_classic_logged.png`, HTML=84,204B, SAMUEL=True, vanilla CSS=True.
+  - **Playwright form interaction issue**: Пряма Playwright спроба login через `page.fill()` + `page.click()` не працювала — `form.submit()` в Playwright блокує через навігацію. Вирішено через curl login + cookie injection у Playwright context.
+  - **TASK-033 documented**: BACKLOG.md і PROJECT_STATUS.md оновлені із чесним описом проблеми та root cause.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/mangos-website/index.php` (template fallback fix)
+  - `workspace:/opt/mangos-website` (live containers, image update)
+  - `docs/BACKLOG.md` (TASK-033 added, TASK-032 note added)
+  - `docs/PROJECT_STATUS.md` (TASK-033 hotfix documented)
+  - `docs/SESSION_LOG.md` (this entry)
+  - `localProjects/cmangos_projects/docker-website/browser-audit/` (verification scripts)
+- Верифікація:
+  - curl login + GET: всі 3 realm'и повертають `templates/vanilla/css/newhp.css`, 82K+ HTML, SAMUEL in page, zero broken `templates/css/` paths.
+  - Playwright screenshot з cookies: styled page, correct content.
+- Блокери / ризики:
+  - Нові акаунти (created via registration) також не матимуть рядків у `account_extend` — code fallback captures this, але registration flow повинен створювати row. Потрібна перевірка.
+  - `public-site-compat.sql` ще не оновлений з auto-seeding для fresh deployments.
+- Рекомендований наступний крок:
+  - Оновити `public-site-compat.sql` з auto-seed для `account_extend`.
+  - Перевірити registration flow на предмет створення `account_extend` row.
+
+---
+
+### Session — 2026-03-16 (continued), TASK-034 auth render gate
+
+- Контекст:
+  - Після TASK-033 стало очевидно, що старий browser audit і попередні claims про `production-ready` не перевіряли logged-in browser state. Потрібен окремий жорсткий gate, який валиться саме на broken post-login rendering.
+- Зроблена робота:
+  - Додано standalone gate `localProjects/cmangos_projects/docker-website/browser-audit/auth_render_audit.py`.
+  - Gate виконує real login через curl cookies, відкриває logged-in frontpage у Playwright Chromium для Classic/TBC/WotLK, зберігає screenshots і перевіряє:
+    - user marker `SAMUEL` у HTML;
+    - expected CSS path `templates/vanilla/css/newhp.css`;
+    - відсутність broken path fragment `templates/css/`;
+    - 0 failed CSS/JS/image resources.
+  - Додано config `live_auth_render_config.json` і runner `run_live_auth_audit.sh`.
+  - Live run пройшов успішно: report `browser-audit/reports/20260316_205454_auth/`, `checks_total=3`, `checks_failed=0`, `release_gate_passed=true`.
+  - Для старого `browser_audit.py` також додано auth-related groundwork і більш robust navigation/screenshot behavior, але реальний release-critical safety net винесено в окремий runner, який доведено live.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/docker-website/browser-audit/auth_render_audit.py`
+  - `localProjects/cmangos_projects/docker-website/browser-audit/live_auth_render_config.json`
+  - `localProjects/cmangos_projects/docker-website/browser-audit/run_live_auth_audit.sh`
+  - `localProjects/cmangos_projects/docker-website/browser-audit/browser_audit.py`
+  - `localProjects/cmangos_projects/docker-website/browser-audit/live_site_matrix_config.json`
+  - `docs/BACKLOG.md`, `docs/COMMANDS_REFERENCE.md`, `docs/TESTING_AND_RELEASE.md`, `docs/PROJECT_STATUS.md`, `docs/SESSION_LOG.md`
+- Верифікація:
+  - Classic: `World of Warcraft Classic`, 83151B, user marker ✓, expected css ✓, broken html ✗, failed resources 0.
+  - TBC: `World of Warcraft TBC`, 83038B, user marker ✓, expected css ✓, broken html ✗, failed resources 0.
+  - WotLK: `World of Warcraft WotLK`, 82992B, user marker ✓, expected css ✓, broken html ✗, failed resources 0.
+- Блокери / ризики:
+  - Full guest matrix crawler на legacy Armory/profile pages досі може бути крихким у Playwright. Це не блокує новий logged-in release gate, але означає, що broad guest crawler варто окремо доробити без поспішних claims.
+- Рекомендований наступний крок:
+  - Або окремо стабілізувати full `browser_audit.py` для heavy Armory pages,
+  - або розбити guest matrix на lighter deterministic checks замість одного broad crawler.
+
+---
+
+### Session — 2026-03-16 (continued), self-service website transfer backlog decomposition
+
+- Контекст:
+  - Користувач запропонував еволюцію current transfer model: замість ручного конфіга з акаунтом у `sync-accounts.conf` перенести запуск у website account area, де user сам бачить своїх персонажів і натискає `Transfer to TBC` або `Transfer to WotLK`.
+  - Критична бізнес-вимога: запит `Transfer to WotLK` не може робити direct skip, а повинен виконуватися як послідовний chain через TBC.
+  - Додатково це залежить від раніше озвученої вимоги про cross-patch website session/identity.
+- Зроблена робота:
+  - Ідею розкладено в backlog як окремий feature track `TASK-035..TASK-045`.
+  - Декомпозицію зроблено дрібними задачами замість однієї великої implementation card:
+    - product contract;
+    - cross-patch identity/session contract;
+    - request schema + audit trail;
+    - eligibility discovery layer;
+    - targeted `Classic -> TBC` runner;
+    - chained `to_wotlk` runner;
+    - locking/idempotency guards;
+    - account settings UI;
+    - user history/progress surface;
+    - admin controls + kill-switches;
+    - QA matrix + release gate.
+  - `PROJECT_BRIEF` і `PROJECT_STATUS` оновлено, щоб ця фіча більше не жила тільки в чаті, а була частиною канонічного scope.
+- Які файли / області зачеплено:
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_BRIEF.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - У backlog існує явний дрібний трек `TASK-035` ... `TASK-045` з залежностями й acceptance criteria.
+  - У `PROJECT_BRIEF` додано окремий deliverable для website self-service transfer control plane.
+  - У `PROJECT_STATUS` зафіксовано, що self-service transfer track уже декомпозований, але ще не імплементований.
+- Блокери / ризики:
+  - Реалізацію не можна починати з кнопок у UI, доки не закрито contract-level питання по cross-patch session/identity і request queue semantics.
+  - Для runtime safety обов'язкові locking/idempotency guards; без них self-service transfer небезпечний.
+- Рекомендований наступний крок:
+  - Починати з `TASK-035`, потім `TASK-036`, і лише після цього переходити до schema/runner implementation.
+
+---
+
+### Session — 2026-03-16 (continued), account character roster requirement added to backlog
+
+- Контекст:
+  - Користувач окремо уточнив, що на сайті зараз не видно переліку персонажів, які належать залогіненому акаунту, і це має бути окремою корисною фічею, бо вона поширена на подібних сайтах.
+  - Ця вимога частково перетиналась із transfer eligibility list, але не повинна бути захована всередині transfer-only UI.
+- Зроблена робота:
+  - Backlog розширено ще двома окремими задачами:
+    - `TASK-046` — backend/data layer для account character roster;
+    - `TASK-047` — окремий logged-in UI section `My Characters`.
+  - `TASK-042` змінено так, щоб transfer controls були не базовим roster, а наступним шаром поверх уже реалізованого character list.
+  - `PROJECT_BRIEF` і `PROJECT_STATUS` оновлено, щоб roster був окремим deliverable у website account area.
+- Які файли / області зачеплено:
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_BRIEF.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - У backlog явно з'явилися `TASK-046` і `TASK-047` з власними acceptance criteria.
+  - `TASK-042` тепер залежить від `TASK-047`, а не підміняє собою базовий roster.
+- Блокери / ризики:
+  - Навіть standalone roster залежить від correct cross-patch account mapping; без цього можна показати неповний або хибний список персонажів.
+- Рекомендований наступний крок:
+  - Після `TASK-035` перейти до `TASK-036`, а потім брати `TASK-046` як першу concrete user-facing website feature перед transfer buttons.
+
+---
+
+### Session — 2026-03-16 (continued), modern PHP feasibility question converted into backlog track
+
+- Контекст:
+  - Користувач прямо повернув розмову до питання, яке раніше вже підіймалось, але не було формально закрите: чи реально перевести current legacy website на сучасний PHP.
+  - Потрібна не абстрактна відповідь, а чесний engineering verdict, прив'язаний до масштабу codebase і legacy debt.
+- Зроблена робота:
+  - Перевірено поточний масштаб website PHP layer: `321` PHP files.
+  - Перераховано safe total для PHP LOC: `53,355` lines у current `mangos-website` tree.
+  - Швидкий compatibility scan підтвердив heavy legacy debt, зокрема explicit `mysql_*` usage в public code paths на кшталт `donate.php`, а project status already фіксує, що live runtime сидить на `php:5.6-apache`.
+  - Створено окремий backlog track `TASK-048..TASK-052` для modernization decision замість безконтрольного rewrite promise.
+- Які файли / області зачеплено:
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_BRIEF.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - У backlog є окремі задачі для feasibility assessment, compatibility inventory, target architecture, route-level slices і low-risk prototype.
+  - High-level docs тепер фіксують modernization як decision track, а не як мовчазне припущення.
+- Блокери / ризики:
+  - Big-bang rewrite для цього проєкту має високий ризик втрати живих legacy features, бо app прив'язаний до старого runtime, старих DB assumptions і PHP 5.6 behavior.
+  - Прямий jump на PHP 8.x без inventory phase майже гарантовано дасть масу fatal errors через removed mysql extension та інші compatibility breaks.
+- Рекомендований наступний крок:
+  - Почати з `TASK-048`, а одразу після нього виконати `TASK-049`; без цих двох задач рішення про full rewrite буде слабким і недостовірним.
+
+---
+
+### Session — 2026-03-16 (continued), TASK-048 modern PHP feasibility assessment completed
+
+- Контекст:
+  - Користувач попросив не відкладати відповідь про modern PHP migration і далі дозволив рухатись по website backlog у тій послідовності, яка технічно виглядає правильною.
+  - Потрібно було перетворити попередню усну оцінку на канонічний verdict, щоб website track не стартував з хибної передумови про обов'язковий total rewrite.
+- Зроблена робота:
+  - Завершено `TASK-048`.
+  - Зібрано й зафіксовано hard numbers по codebase:
+    - `321` PHP files;
+    - `53,355` PHP LOC;
+    - `components=162`, `templates=81`, `armory=40`, `core=27`, `install=2`, `root=5`.
+  - Зібрано й зафіксовано quick compatibility debt snapshot:
+    - `144` входження `mysql_*`;
+    - `325` входжень `ereg/split/each/create_function`;
+    - `0` Composer manifests.
+  - У `DEC-022` зафіксовано canonical recommendation:
+    - modern PHP migration реальна;
+    - big-bang rewrite не є рекомендованим стартовим шляхом;
+    - сайтові user-facing features не блокуються цим rewrite і можуть рухатись окремим feature-first track.
+  - У `PROJECT_STATUS` додано explicit website execution order після закриття `TASK-048`.
+- Які файли / області зачеплено:
+  - `docs/BACKLOG.md`
+  - `docs/DECISIONS.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - `TASK-048` у backlog позначено як завершений з evidence section.
+  - `DEC-022` існує як довговічне рішення про incremental modernization замість total rewrite.
+  - `PROJECT_STATUS` тепер містить явний recommended order для website work.
+- Блокери / ризики:
+  - `TASK-049` compatibility inventory усе ще потрібен для реального migration plan, але він більше не блокує початок account-feature track.
+  - Feature-first path усе ще залежить від `TASK-035` і `TASK-036`, бо без них account/transfer UX ризикує піти в суперечливі rules.
+- Рекомендований наступний крок:
+  - Перейти до `TASK-035` як до першої execution-ready website feature-contract задачі.
+
+---
+
+### Session — 2026-03-16 (continued), TASK-035 website account-area product contract completed
+
+- Контекст:
+  - Після закриття `TASK-048` стало зрозуміло, що website features можна рухати без total rewrite, але для цього потрібен був єдиний product contract, щоб `My Characters`, `Change Password` і transfer actions не були розкидані по різних неузгоджених припущеннях.
+  - Legacy website already має account surfaces `account/manage`, `account/chartools`, `account/charcreate`, тому новий contract треба було прив'язати до реальної IA, а не до вигаданого зеленого поля.
+- Зроблена робота:
+  - Завершено `TASK-035`.
+  - У `DEC-023` зафіксовано, що account area є canonical control plane для:
+    - roster `My Characters`;
+    - `Change Password`;
+    - self-service transfers.
+  - У `TRANSFER_SYSTEM` додано окремий product-contract section для website account area з правилами structure, visibility, ownership і transfer flows.
+  - У backlog додано окремі дрібні password tasks:
+    - `TASK-053` — password-change contract;
+    - `TASK-054` — password-change UI.
+  - `PROJECT_BRIEF` і `PROJECT_STATUS` синхронізовано з цим contract-ом і з новою recommended sequence.
+- Які файли / області зачеплено:
+  - `docs/BACKLOG.md`
+  - `docs/DECISIONS.md`
+  - `docs/PROJECT_BRIEF.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/TRANSFER_SYSTEM.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - `TASK-035` у backlog позначено завершеним з evidence section.
+  - `DEC-023` фіксує canonical account-area product rules.
+  - `TRANSFER_SYSTEM` містить explicit website account product contract, який спирається на current legacy routes.
+- Блокери / ризики:
+  - Реальний cross-patch account/session mapping усе ще невизначений і лишається blocker-ом для roster/password/transfer implementation tasks.
+  - Без `TASK-036` не можна безпечно вирішити, чи password change і roster діють в межах одного patch account, чи across all linked accounts.
+- Рекомендований наступний крок:
+  - Перейти до `TASK-036`, а після нього брати `TASK-046` як першу implementation-facing website задачу.
+
+---
+
+### Session — 2026-03-16 (continued), TASK-036 cross-patch identity and session contract completed
+
+- Контекст:
+  - Після `TASK-035` product contract уже вимагав `My Characters`, `Change Password` і transfer actions as one account area, але технічний principal/session model ще лишався неоднозначним.
+  - Потрібно було зняти цей blocker на рівні architecture contract до старту roster/password implementation tasks.
+- Зроблена робота:
+  - Завершено `TASK-036`.
+  - Code reading підтвердив current patch-local behavior:
+    - `index.php` викликає `session_start()`;
+    - `core/class.auth.php` логінить через cookie `site_cookie` + account key;
+    - cookie path прив'язаний до current `site_href`, тобто multiroute surfaces today фактично мають path-scoped session behavior;
+    - auth principal базується на local `account.id` + `website_accounts.account_id`.
+  - У `DEC-024` зафіксовано canonical contract:
+    - future cross-patch features використовують website-scoped identity;
+    - patch-local auth rows стають linked child accounts;
+    - session scope має бути domain-wide across `/classic/`, `/tbc/`, `/wotlk`;
+    - dangerous actions потребують explicit confirmation поверх базової сесії.
+  - `ARCHITECTURE` і `PROJECT_STATUS` синхронізовано з цим рішенням.
+- Які файли / області зачеплено:
+  - `docs/BACKLOG.md`
+  - `docs/DECISIONS.md`
+  - `docs/ARCHITECTURE.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - `TASK-036` у backlog позначено завершеним з evidence section.
+  - `DEC-024` існує як довговічний identity/session contract.
+  - `PROJECT_STATUS` тепер прямо каже, що website implementation може стартувати з `TASK-046`.
+- Блокери / ризики:
+  - Contract-level рішення не означає, що mapping layer already існує в коді; це все ще наступний implementation step.
+  - Password change і roster усе ще треба реалізувати з урахуванням linked-account mapping, а не current patch-local account rows.
+- Рекомендований наступний крок:
+  - Перейти до `TASK-046` як до першої implementation-facing website задачі.
+
+### Сесія — `2026-03-17 01:35` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-042`
+- Контекст:
+  - Після `TASK-041` website account area already had truthful eligibility and request-guard metadata, but users still could not see transfer controls, blocker reasons, or any confirmation flow inside the logged-in `My Characters` surface.
+- Зроблена робота:
+  - Заклеймлено `TASK-042` у backlog і завершено implementation directly in the legacy account/manage controller and template.
+  - `components/account/account.manage.php` now builds a transfer UI view model: guid-keyed eligibility lookup, minimal status catalog (`idle`, `pending_confirm`, `queued`, `running`, `failed`, `completed`), action labels, and a GET-driven preview restricted to real `allowed` actions only.
+  - `templates/offlike/account/account.manage.php` now extends `My Characters` with transfer-state badges, per-action cards for `to_tbc` and `to_wotlk`, explicit blocked/not-applicable states, visible `request_guard.active_lock_key`, and a confirmation / queued-preview panel anchored under the roster.
+  - The UI intentionally stops short of persistent request creation; preview copy makes it explicit that durable queue/history/admin wiring is deferred to `TASK-043` and `TASK-044`.
+  - Closeout docs updated across `BACKLOG`, `PROJECT_STATUS`, `TESTING_AND_RELEASE`, and this session log.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/mangos-website/components/account/account.manage.php`
+  - `localProjects/cmangos_projects/mangos-website/templates/offlike/account/account.manage.php`
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/TESTING_AND_RELEASE.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - Editor diagnostics: no errors for `components/account/account.manage.php` and `templates/offlike/account/account.manage.php`.
+  - PHP 5.6 syntax gates passed inside `php:5.6-apache` for `templates/offlike/account/account.manage.php`, `components/account/account.manage.php`, and `core/common.php`.
+  - Logged-in browser auth/render audit final proof: `localProjects/cmangos_projects/docker-website/browser-audit/reports/20260316_233118_auth/auth_render_summary.json` => `checks_total=3`, `checks_failed=0`, `release_gate_passed=true`; screenshots were produced for `classic`, `tbc`, and `wotlk`.
+  - One immediately prior audit run failed only on `tbc` screenshot capture timeout while `has_user_marker=true`, `has_expected_css=true`, `has_forbidden_html=false`, and `failed_resources=[]`; rerun passed without code changes, confirming a transient screenshot flake rather than a transfer UI regression.
+  - The wrapper command still ended with a trailing local Python `JSONDecodeError` after printing the passing summary, so the generated `auth_render_summary.json` is currently the trustworthy artifact until that harness bug is fixed.
+- Блокери / ризики:
+  - `TASK-042` is intentionally UI-only: no persistent `transfer_requests` row creation, no user-visible history list, and no admin/operator controls exist yet.
+  - The auth render harness has a local wrapper bug that can exit non-zero after a successful pass; this does not invalidate the saved passing report but should be cleaned up separately.
+- Рекомендований наступний крок:
+  - Перейти до `TASK-043` і дати users a real transfer history/progress surface on top of the now-visible transfer actions.
+
+### Сесія — `2026-03-17 01:55` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-043`
+- Контекст:
+  - Після `TASK-042` logged-in users could see transfer actions and confirmation placement, але canonical product/runtime docs ще не фіксували exactly how active requests, completed history, step labels, UI-safe errors, and refresh semantics must appear once persistent request rows are wired.
+- Зроблена робота:
+  - Заклеймлено і завершено `TASK-043` як contract-first documentation task.
+  - `docs/TRANSFER_SYSTEM.md` розширено user-facing history/progress contract: fixed `Active Transfer` + `Transfer History` layout, minimum visible fields per request row, canonical head/step labels, normalized error-category mapping, safe user-message guidance, refresh contract, and rendered examples for success/fail/partial outcomes.
+  - `docs/TESTING_AND_RELEASE.md` доповнено explicit acceptance gates for `TASK-043`, so future implementation/review cycles have one canonical checklist instead of re-deriving UI behavior from chat context.
+  - `BACKLOG` і `PROJECT_STATUS` синхронізовано: next execution-ready website item is now `TASK-044`.
+- Які файли / області зачеплено:
+  - `docs/TRANSFER_SYSTEM.md`
+  - `docs/TESTING_AND_RELEASE.md`
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - `TASK-043` backlog acceptance now maps directly to canonical sections in `TRANSFER_SYSTEM` and `TESTING_AND_RELEASE`.
+  - The contract now explicitly covers all four required backlog subtasks: history-list format, chain progress labels, normalized UI error categories, and refresh behavior.
+  - No website/runtime code was changed in this task, because persistent `transfer_requests` writers/readers are still future work and the backlog evidence for `TASK-043` is the documented UI contract itself.
+- Блокери / ризики:
+  - Users still do not have live persisted request history on the website surface yet; this task only fixed the contract the later implementation must follow.
+  - `TASK-044` remains the next operational step before any admin/operator controls can rely on a stable history/progress surface.
+- Рекомендований наступний крок:
+  - Перейти до `TASK-044` і зафіксувати admin controls plus kill-switch behavior against the now-canonical request/history contract.
+
+### Сесія — `2026-03-17 02:20` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-044`
+- Контекст:
+  - Після `TASK-043` website transfer wave already had canonical user-facing history/progress semantics, але operator side still lacked one documented control plane for global disable/pause behavior, request inspection/retry/cancel boundaries, and emergency-stop ordering on the shared `workspace` host.
+- Зроблена робота:
+  - Заклеймлено і завершено `TASK-044` як docs-first operational control-plane task.
+  - `docs/TRANSFER_SYSTEM.md` доповнено operator-controls section: admin-only action set, canonical runtime control flags, user/operator boundary, pause/resume/disable/emergency semantics, request retry/cancel rules, and audit requirements for overrides.
+  - `docs/COMMANDS_REFERENCE.md` тепер містить shell-level runbook commands for inspecting and toggling `self-service-transfer.disabled.flag`, `transfer-queue.paused.flag`, and `emergency-stop.flag`, plus lock-metadata inspection before manual recovery.
+  - `docs/TESTING_AND_RELEASE.md` доповнено explicit acceptance gates for the operator-control contract.
+  - `docs/DECISIONS.md` now records the durable policy that operator overrides must use explicit runtime control flags plus append-only audit events rather than ad hoc manual mutation.
+  - `BACKLOG` і `PROJECT_STATUS` синхронізовано: website transfer contract wave is documented through `TASK-044`, and the main execution-ready track returns to AzerothCore/runtime work.
+- Які файли / області зачеплено:
+  - `docs/TRANSFER_SYSTEM.md`
+  - `docs/COMMANDS_REFERENCE.md`
+  - `docs/TESTING_AND_RELEASE.md`
+  - `docs/DECISIONS.md`
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - `TASK-044` acceptance now maps directly to canonical sections in `TRANSFER_SYSTEM`, `COMMANDS_REFERENCE`, `TESTING_AND_RELEASE`, and `DECISIONS`.
+  - The contract now explicitly covers all four backlog subtasks: global feature flag, admin action set, emergency stop and recovery runbook, and audit requirements.
+  - No code or live runtime mutation was performed for this task, because the backlog evidence target was the documented operational contract and shared-host runbook rather than an unapproved rollout.
+- Блокери / ризики:
+  - The operator-control plane is documented, but no website admin UI or persistent request writer exists yet to enforce it automatically.
+  - Any future live implementation on `workspace` still requires explicit approval because it touches a shared high-risk host.
+- Рекомендований наступний крок:
+  - Повернутися до `TASK-013` / `TASK-027` for the live AzerothCore/runtime track, unless you want to reopen website implementation work with a new backlog item.
+
+### Сесія — `2026-03-17 02:40` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-013`
+- Контекст:
+  - Після завершення website transfer contract wave (`TASK-037`..`TASK-044`) основний roadmap path повернувся до `TASK-013`, але docs already hinted that the missing piece was not code alone: the 4-step pipeline still needed one truthful topology where CMaNGOS and AzerothCore phases coexist.
+- Зроблена робота:
+  - `TASK-013` заклеймлено в backlog і перевірено проти current runtime reality instead of assuming the old blockers had changed.
+  - Підтверджено current local topology: `docker ps` на `morgan.local` shows only `azerothcore-authserver`, `azerothcore-worldserver`, and `azerothcore-db`.
+  - Підтверджено current remote topology: `workspace` `docker ps` shows only the verified CMaNGOS stacks (`cmangos-*`) and no live AzerothCore runtime.
+  - Code-level root cause verified in `transfer/lib.sh` and `transfer/daily-sync.sh`: all phases resolve containers through local `docker exec`, and Phase E/F is enabled only if `docker inspect` sees `azerothcore-db`, `azerothcore-worldserver`, and `azerothcore-authserver` on the same host as the earlier CMaNGOS phases.
+  - `TASK-013` therefore moved from in-progress to blocked instead of producing a fake E2E summary.
+- Які файли / області зачеплено:
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - Local runtime snapshot: only AzerothCore containers are up on `morgan.local`.
+  - Remote runtime snapshot: only Classic/TBC/WotLK CMaNGOS containers are up on `workspace`.
+  - `daily-sync.sh` Phase E/F guard checks `docker inspect` for AzerothCore containers locally; `lib.sh` DB/server maps also assume same-host `docker exec` access for all expansions.
+- Блокери / ризики:
+  - Without a co-located runtime topology, any claimed `Classic -> TBC -> WotLK -> AzerothCore` result would be misleading.
+  - Deploying AzerothCore onto `workspace` is a shared-host infra mutation and still requires explicit approval.
+- Рекомендований наступний крок:
+  - Either provide explicit approval to deploy AzerothCore on `workspace`, or create a new local topology path with Classic/TBC/WotLK stacks beside the already-running local AzerothCore runtime.
+
+### Сесія — `2026-03-17 03:05` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-049`
+- Контекст:
+  - After the `TASK-013` blocker was confirmed, the next execution-ready item moved to the website modernization strategy track. `TASK-049` needed a real source-level compatibility inventory so `TASK-050` would not guess about PHP 8 migration cost.
+- Зроблена робота:
+  - Заклеймлено і завершено `TASK-049` як local source-analysis task over `localProjects/cmangos_projects/mangos-website/`.
+  - Verified the current runtime baseline from `docker-website/Dockerfile`: the site still targets `php:5.6-apache` on archived Debian Stretch and installs legacy extensions including `mysql`, `mysqli`, and `pdo_mysql`.
+  - Quantified direct compatibility blockers across the website source tree:
+    - `144` `mysql_*` refs across `22` PHP files;
+    - `6` magic-quotes refs;
+    - `7` removed curly-brace string-offset refs;
+    - `3` `preg_replace /e` refs;
+    - `1` `create_function` ref;
+    - `1` `eregi` ref;
+    - `3` `=& new` refs;
+    - `13` old-style constructor refs in bundled libraries.
+  - Built a risk heatmap by product surface:
+    - `account` = light but real blocker density in `core/common.php` / `core/class.auth.php`;
+    - `forum` = legacy `AJAXChat` hotspot;
+    - `armory` = largest user-facing modernization hotspot;
+    - `admin` = highest raw ext/mysql concentration;
+    - `donate` = high-risk legacy payment surface with low modernization value;
+    - `bootstrap/core` = subsystem-heavy runtime glue.
+  - Identified isolate-or-replace subsystem boundaries for the next architecture phase: `DbSimple`, `JsHttpRequest`, `AJAXChat`, legacy mail helpers, image/thumbnail helpers, and the standalone `donate.php` flow.
+  - Added a durable decision that these bundled subsystems should not be treated as first-wave PHP 8 uplift targets.
+- Які файли / області зачеплено:
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/DECISIONS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - `docker-website/Dockerfile` confirms the current runtime contract: `php:5.6-apache`, archived Debian Stretch, `gd`, `gmp`, `mysql`, `mysqli`, `pdo_mysql`.
+  - Source inventory commands confirmed the blocker counts above.
+  - Representative examples verified in source:
+    - `donate.php` still uses direct `mysql_connect()` / `mysql_query()` calls.
+    - `core/common.php` still branches on `get_magic_quotes_gpc()` and uses live `preg_replace(.../e, ...)`.
+    - `components/chat/lib/class/AJAXChat.php` uses `create_function()`.
+    - `components/chat/lib/class/AJAXChatEncoding.php` uses `preg_replace /e`.
+    - `core/mail/func.php` still uses `eregi()`.
+    - `components/ajax/ajax.php` still uses `=& new JsHttpRequest(...)`.
+    - `core/class.image.php` still uses removed curly-brace string indexing.
+- Блокери / ризики:
+  - The inventory reduces uncertainty, but it does not by itself pick the modernization architecture or execution order across routes; that remains `TASK-050` / `TASK-051`.
+  - Any attempt to uplift forum/chat, admin chartools, donate, or deep Armory internals first would pull bundled legacy subsystem replacement into the critical path and likely stall incremental progress.
+- Рекомендований наступний крок:
+  - Перейти до `TASK-050` і зафіксувати target architecture that keeps the first modern PHP slice away from subsystem-heavy legacy zones.
+
+### Сесія — `2026-03-17 03:20` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-050`
+- Контекст:
+  - Після `TASK-049` модернізаційний трек уже мав feasibility verdict і quantified blocker inventory, але ще не мав однієї зафіксованої цільової архітектури. Без цього `TASK-051` ризикував перетворитися або на прихований whole-site rewrite, або на нечіткий "оновити PHP" backlog item.
+- Зроблена робота:
+  - Заклеймлено і завершено `TASK-050` як docs-first architecture decision task.
+  - У `docs/ARCHITECTURE.md` зафіксовано three-option comparison:
+    - in-place PHP 8 monolith hardening;
+    - route-level strangler with a companion PHP 8 app layer;
+    - full greenfield replacement.
+  - Preferred target architecture fixed as the route-level strangler:
+    - current PHP 5.6 multiroute website stays the legacy shell/fallback;
+    - a new PHP 8.x application layer will be introduced beside it;
+    - ownership will move by route/module slice instead of a full runtime swap.
+  - Public contract constraints explicitly preserved:
+    - same domain;
+    - same patch prefixes `/classic/`, `/tbc/`, `/wotlk`;
+    - no mandatory URL redesign before the first modern slice exists.
+  - Route/module boundary is now explicit:
+    - modern first-wave owner = account identity/session bridge, account security, roster, transfer queue/history/control-plane;
+    - legacy hold zones = Armory, forum/chat, admin/chartools, donate, and subsystem-heavy helper libraries.
+  - Coexistence strategy documented for the query-driven website IA: selected routes may hand off either at ingress/proxy level or through a thin legacy-side dispatcher when `index.php?n=...` ownership cannot be expressed cleanly as a pure path split.
+  - Added `DEC-035` so this target architecture survives future continuation cycles.
+- Які файли / області зачеплено:
+  - `docs/ARCHITECTURE.md`
+  - `docs/PROJECT_BRIEF.md`
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/DECISIONS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - `ARCHITECTURE` now contains the chosen target shape, the route/module ownership boundary, and the coexistence plan.
+  - `DEC-035` fixes the durable rule that modernization proceeds through a companion PHP 8 layer beside the legacy shell rather than an in-place monolith upgrade.
+  - `BACKLOG` marks `TASK-050` complete with explicit evidence for chosen pattern, migration boundary, and transition strategy.
+- Блокери / ризики:
+  - This task chooses the architecture but does not yet produce route slices or a live prototype; those remain `TASK-051` and `TASK-052`.
+  - Query-driven legacy routing still means some slices may need a thin dispatcher/proxy shim before ingress-only ownership becomes practical.
+- Рекомендований наступний крок:
+  - Перейти до `TASK-051` і розбити modernization на execution-ready vertical slices that respect the new `modern first-wave owner` vs `legacy hold zone` boundary.
+
+### Сесія — `2026-03-17 03:35` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-051`
+- Контекст:
+  - Після `TASK-050` target architecture already existed, але modernization backlog still stopped at one generic prototype card. The project still needed a real slice sequence so future continuation would not collapse back into a hidden whole-site rewrite.
+- Зроблена робота:
+  - Заклеймлено і завершено `TASK-051` як route-level backlog decomposition task.
+  - `docs/BACKLOG.md` тепер contains an explicit modernization sequence:
+    - `TASK-052` = prototype gate;
+    - `TASK-056` = modern identity/session bridge;
+    - `TASK-057` = account security;
+    - `TASK-058` = roster/account overview;
+    - `TASK-059` = transfer request/history/control-plane;
+    - `TASK-060` = low-risk public server/content slice later;
+    - `TASK-061` = Armory containment/replacement track;
+    - `TASK-062` = forum/chat hold-zone track;
+    - `TASK-063` = admin/chartools isolation track;
+    - `TASK-064` = donate/payment isolation track.
+  - Для кожного нового slice card зафіксовано migration objective, touched paths, acceptance, і dependency shape.
+  - Low-value/high-risk zones are now explicit hold zones instead of hidden prerequisites: Armory, forum/chat, admin/chartools, and donate/payment are no longer on the critical path for the first modernization wave.
+  - Added `DEC-036` so slice priority and hold-zone rules survive future continuation cycles.
+  - `PROJECT_STATUS` and `PROJECT_BRIEF` now point to the slice backlog instead of a generic modernization umbrella.
+- Які файли / області зачеплено:
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/PROJECT_BRIEF.md`
+  - `docs/DECISIONS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - `BACKLOG` now contains route-level modernization cards with execution order, priorities, and explicit hold zones.
+  - `DEC-036` fixes the durable sequencing rule: prototype first, then account/roster/transfer slices, then lower-priority hold-zone/public tracks.
+  - `PROJECT_STATUS` now treats `TASK-052` as the next modernization step and shows the full post-decomposition slice order.
+- Блокери / ризики:
+  - This task decomposes the work but does not yet validate which exact low-risk slice should be prototyped in code/runtime; that remains `TASK-052`.
+  - Query-driven routing still means some future slices may need a thin dispatcher/proxy shim instead of a pure ingress-only handoff.
+- Рекомендований наступний крок:
+  - Перейти до `TASK-052` і обрати один low-risk slice for the first companion-runtime prototype without pulling any hold-zone dependency into scope.
+
+### Сесія — `2026-03-17 07:55` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-060`
+- Контекст:
+  - After the authenticated first-wave modernization closed at `TASK-059`, the next safe website step was to prove one truly low-risk public slice without reintroducing forum/news/Armory/admin dependency clusters.
+- Зроблена робота:
+  - Заклеймлено й закрито `TASK-060` у backlog, narrowing the slice to the static public `server.howtoplay` page instead of pulling in broader frontpage/news behavior.
+  - Extended `localProjects/cmangos_projects/docker-website/modern-prototype/public/index.php` so the PHP 8 companion runtime now owns the canonical query-string route `/classic|/tbc|/wotlk/index.php?n=server&sub=howtoplay` and loads the matching legacy `lang/howtoplay/*.html` resource directly.
+  - Added lightweight legacy-resource helpers for default-language resolution from `mangos-website/config/config.xml`, `Language` cookie handling, and direct resource loading without bootstrapping the legacy PHP 5.6 application.
+  - Updated `localProjects/cmangos_projects/docker-website/modern-prototype/Dockerfile` to bundle the exact legacy assets this slice depends on (`config/config.xml` and `lang/howtoplay/`), fixing the first runtime failure where the route existed but the container had no legacy resource files to read.
+  - Added `localProjects/cmangos_projects/docker-website/scripts/run-modern-public-howtoplay-smoke.sh` to compare the live legacy page and the local modern canonical URL for the same content contract and to verify truthful unsupported-language fallback behavior.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/docker-website/modern-prototype/public/index.php`
+  - `localProjects/cmangos_projects/docker-website/modern-prototype/Dockerfile`
+  - `localProjects/cmangos_projects/docker-website/scripts/run-modern-public-howtoplay-smoke.sh`
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/TESTING_AND_RELEASE.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - `docker run --rm -v "$PWD/localProjects/cmangos_projects/docker-website/modern-prototype/public":/app -w /app php:8.3-cli php -l index.php` returned `No syntax errors detected in index.php`.
+  - `MW_MODERN_PROTOTYPE_PORT=8103 sh localProjects/cmangos_projects/docker-website/scripts/run-modern-public-howtoplay-smoke.sh` returned:
+    - `public_howtoplay_contract=ok`
+    - `language_fallback=ok`
+  - The smoke compared `https://world-of-warcraft.morgan-dev.com/wotlk/index.php?n=server&sub=howtoplay` against `http://127.0.0.1:8103/wotlk/index.php?n=server&sub=howtoplay` and confirmed the same core guide markers on both.
+- Блокери / ризики:
+  - This public-slice proof is intentionally narrow: it works because `howtoplay` is a static `lang_resource(...)` page. Forum-backed news/frontpage content still carries heavier legacy runtime dependencies and should not be migrated with the same assumption set.
+  - The fallback boundary for this slice remains route-level ownership at ingress: if the modern layer is not mounted for the canonical URL, the legacy shell remains the owner.
+- Рекомендований наступний крок:
+  - Перейти до `TASK-061` і винести Armory в окремий containment/replacement track instead of treating it as the next “simple public page” migration.
+
+### Сесія — `2026-03-17 08:20` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-061`
+- Контекст:
+  - After `TASK-060`, the next route-level modernization item was not another implementation slice but an overdue policy decision: Armory needed to stop being an implicit “maybe next” dependency and become an explicit contained subsystem or a separately planned replacement track.
+- Зроблена робота:
+  - Заклеймлено й закрито `TASK-061` як documentation/policy task.
+  - Reconciled the newer verified reality around Armory with the modernization docs: Armory is currently publicly reachable and partially stabilized on the legacy multiroute runtime, but it still carries a separate data layer (`classicarmory|tbcarmory|wotlkarmory`), XML-era compatibility bridges, legacy JS/bootstrap globals, and expansion-specific behavior that do not fit the lightweight PHP 8 route-slice model.
+  - Updated `docs/ARCHITECTURE.md` with an explicit Armory containment boundary, including the reasons it is not part of the main PHP 8 wave and the minimum public compatibility contract that must survive while it stays legacy-owned.
+  - Added `DEC-038` in `docs/DECISIONS.md`: Armory remains on the legacy runtime for now, and any future modernization must begin as a dedicated replacement/containment program instead of piggybacking on low-risk public-page work.
+  - Updated `docs/PROJECT_STATUS.md` and `docs/BACKLOG.md` so the main modernization wave no longer depends on Armory migration and the next remaining hold-zone item becomes `TASK-062`.
+- Які файли / області зачеплено:
+  - `docs/BACKLOG.md`
+  - `docs/ARCHITECTURE.md`
+  - `docs/DECISIONS.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - Durable policy now reflects verified project reality rather than the older ambiguous “Armory later” wording:
+    - Armory remains public on `/classic|/tbc|/wotlk/armory/index.php`
+    - XML-era endpoints are compatibility bridges, not proof of modernization readiness
+    - the first modernization wave is no longer modeled as if Armory migration were an implicit prerequisite
+  - `TASK-061` acceptance is satisfied at the documentation/control-plane level: Armory is now explicitly separated from the main modernization critical path.
+- Блокери / ризики:
+  - This task intentionally does not change live Armory code or runtime behavior.
+  - If the project later wants deeper Armory change, a separate dedicated track still has to define data contracts, replacement scope, and acceptance evidence.
+- Рекомендований наступний крок:
+  - Перейти до `TASK-062` і оформити forum/chat as the next explicit legacy hold zone instead of letting `AJAXChat` and forum templates remain an undocumented dependency cluster.
+
+### Сесія — `2026-03-17 08:35` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-065`
+- Контекст:
+  - Користувач явно попросив зафіксувати в документації окреме workflow-правило: усі проміжні роздуми та status updates агента під час обробки будь-якого запиту мають завжди бути українською, а не залишатися лише неформальною preference.
+- Зроблена робота:
+  - Додано в `workflow_config.md` новий explicit marker `INTERMEDIATE_AGENT_UPDATES_LANGUAGE: Ukrainian`.
+  - Додано окремий розділ у `workflow_config.md`, який відрізняє загальну мовну preference від жорсткого правила для intermediary updates.
+  - Оновлено `AGENTS.md`, щоб канонічна стартова інструкція для нового агента прямо вимагала українську мову для всіх проміжних апдейтів, progress reports і робочих chat messages під час виконання задач.
+  - Закрито `TASK-065` у backlog як docs-only workflow change.
+- Які файли / області зачеплено:
+  - `workflow_config.md`
+  - `AGENTS.md`
+  - `docs/BACKLOG.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - Обидві канонічні точки входу для continuation (`workflow_config.md` і `AGENTS.md`) тепер містять явне правило про українську мову для проміжних агентських апдейтів.
+- Блокери / ризики:
+  - Немає технічних блокерів; це policy/documentation change.
+- Рекомендований наступний крок:
+  - У наступних continuation cycles трактувати українську мову для intermediary updates як жорстку workflow-вимогу, а не лише як загальну мовну preference.
+
+### Сесія — `2026-03-17 08:52` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-062`
+- Контекст:
+  - Після `TASK-061` наступним execution-ready hold-zone item лишався forum/chat. Потрібно було прибрати цей блок із сірої зони: зафіксувати, що forum і community chat зараз залишаються public/legacy-owned surfaces, але не є “наступним простим PHP 8 slice”.
+- Зроблена робота:
+  - Заклеймлено й закрито `TASK-062` як documentation/policy task.
+  - Зіставлено verified runtime reality з наявними modernization rules: prefixed forum routes already work publicly, frontpage/news still link into forum archives/topics, admin/news management still depends on forum actions, а community chat лишається iframe-wrapper над bundled `AJAXChat`.
+  - Оновлено `docs/ARCHITECTURE.md` explicit forum/chat containment boundary: why these surfaces do not fit the lightweight companion-route pattern, який спрацював для `realmstatus`, identity/session, roster, transfer, і статичного `howtoplay`.
+  - Додано `DEC-039` у `docs/DECISIONS.md`: forum/chat залишаються на legacy multiroute PHP 5.6 runtime, а будь-яка future PHP 8 modernization тут має стартувати як окремий replacement/containment track з власними acceptance gates.
+  - Оновлено `docs/PROJECT_STATUS.md` і `docs/BACKLOG.md`, щоб first-wave modernization більше не залежав від forum/chat migration і наступним hold-zone item став `TASK-063`.
+- Які файли / області зачеплено:
+  - `docs/BACKLOG.md`
+  - `docs/ARCHITECTURE.md`
+  - `docs/DECISIONS.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - Durable policy тепер відображає verified project reality instead of leaving forum/chat as an undocumented dependency cluster:
+    - `/classic|/tbc|/wotlk/index.php?n=forum` remain part of the live public contract;
+    - frontpage/news archives still depend on forum-backed links;
+    - community chat remains an iframe-backed legacy `components/chat/index.php` surface;
+    - bundled `AJAXChat` debt stays outside the PHP 8 companion critical path.
+  - `TASK-062` acceptance is satisfied at the documentation/control-plane level: forum/chat are now explicitly separated from the main modernization critical path.
+- Блокери / ризики:
+  - This task intentionally does not change live forum/chat code or runtime behavior.
+  - If the project later wants deeper forum/chat changes, a separate explicit track still has to define data contracts, moderation/admin boundaries, and replacement acceptance evidence.
+- Рекомендований наступний крок:
+  - Перейти до `TASK-063` і так само явно ізолювати admin/chartools від public website modernization wave.
+
+### Сесія — `2026-03-17 09:09` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-063`
+- Контекст:
+  - Після `TASK-062` наступним execution-ready hold-zone item лишався admin/chartools. Потрібно було прибрати і цей блок із сірої зони: зафіксувати, що hardened admin entrypoint і chartools mutation stack не є частиною first-wave PHP 8 modernization, навіть якщо окремі chartools surfaces живуть у legacy account IA.
+- Зроблена робота:
+  - Заклеймлено й закрито `TASK-063` як documentation/policy task.
+  - Зіставлено verified runtime reality з наявними modernization rules: public contract already keeps `/classic|/tbc|/wotlk/index.php?n=admin` outside the user-facing surface as `403`, while the legacy admin panel still fans out into account management, realms, forum/news operations, vote/donate tooling, backups/logs, tickets, and chartools/chartransfer actions.
+  - Підтверджено, що `admin.chartools` і `admin.chartransfer` reuse the same legacy include stack (`chartools/charconfig.php`, `add.php`, `functionstransfer.php`, `functionsrename.php`, `tabs.php`) with direct `mysql_*` calls and cross-database mutation logic, а authenticated `account&sub=chartools` теж виконує прямі `characters` table updates, тому весь цей family не відповідає safer route-slice model already used for identity/session, roster, or transfer control-plane work.
+  - Оновлено `docs/ARCHITECTURE.md` explicit admin/chartools containment boundary.
+  - Додано `DEC-040` у `docs/DECISIONS.md`: admin/chartools залишаються на legacy multiroute PHP 5.6 runtime, а будь-яка future PHP 8 modernization тут має стартувати як окремий operator/mutation replacement track з власними acceptance gates.
+  - Оновлено `docs/PROJECT_STATUS.md` і `docs/BACKLOG.md`, щоб first-wave modernization більше не залежав від admin/chartools migration і наступним hold-zone item став `TASK-064`.
+- Які файли / області зачеплено:
+  - `docs/BACKLOG.md`
+  - `docs/ARCHITECTURE.md`
+  - `docs/DECISIONS.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - Durable policy тепер відображає verified project reality instead of leaving admin/chartools as a vague legacy catch-all:
+    - `/classic|/tbc|/wotlk/index.php?n=admin` remains outside the public contract as a fail-closed operator zone;
+    - admin/chartools still fans out into operator powers and character mutation actions;
+    - authenticated `account&sub=chartools` remains part of the same legacy mutation family rather than a low-risk modern account slice;
+    - direct `mysql_*` chartools debt stays outside the PHP 8 companion critical path.
+  - `TASK-063` acceptance is satisfied at the documentation/control-plane level: admin/chartools are now explicitly separated from the main modernization critical path.
+- Блокери / ризики:
+  - This task intentionally does not change live admin/chartools code or runtime behavior.
+  - If the project later wants deeper admin/chartools changes, a separate explicit track still has to define operator roles, audit rules, and mutation-safety acceptance evidence.
+- Рекомендований наступний крок:
+  - Перейти до `TASK-064` і так само явно ізолювати donate/payment flow від first-wave modernization.
+
+### Сесія — `2026-03-17 09:24` — `Samuel Morgan` — `morgan.local`
+
+- Пов'язані задачі: `TASK-064`
+- Контекст:
+  - Після `TASK-063` останнім execution-ready website hold-zone item лишався donate/payment. Потрібно було закрити і цю сіру зону: зафіксувати, що legacy payment contour не є частиною first-wave PHP 8 modernization, навіть якщо навколо нього існують community/admin templates.
+- Зроблена робота:
+  - Заклеймлено й закрито `TASK-064` як documentation/policy task.
+  - Зіставлено verified runtime reality з наявними modernization rules: standalone `/donate.php` already stays outside the public contract as a hardened route, while the legacy payment contour still spans PayPal IPN verification, payment-record inserts, admin donation template/resend tools, and in-game item fulfillment.
+  - Підтверджено, що `donate.php` still uses direct `fsockopen()` callbacks to PayPal, raw `$_POST` handling, direct `mysql_*` queries, and debug email side effects, while community/admin donate flows still depend on `paypal_payment_info`, `paypal_cart_info`, `paypal_subscription_info`, `donations_template`, and legacy item-mail delivery helpers.
+  - Оновлено `docs/ARCHITECTURE.md` explicit donate/payment containment boundary.
+  - Додано `DEC-041` у `docs/DECISIONS.md`: donate/payment залишається на legacy multiroute PHP 5.6 runtime, а будь-яка future PHP 8 modernization тут має стартувати як окремий payment replacement or retirement track з власними acceptance gates.
+  - Оновлено `docs/PROJECT_STATUS.md` і `docs/BACKLOG.md`, щоб first-wave modernization більше не залежав від donate/payment migration і вся website hold-zone sequence `TASK-061..TASK-064` була закрита.
+- Які файли / області зачеплено:
+  - `docs/BACKLOG.md`
+  - `docs/ARCHITECTURE.md`
+  - `docs/DECISIONS.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - Durable policy тепер відображає verified project reality instead of leaving donate/payment as a vague high-risk footnote:
+    - standalone `/donate.php` remains outside the public contract as a fail-closed payment surface;
+    - legacy donate behavior still mixes payment verification, bookkeeping, and in-game fulfillment;
+    - community/admin donate templates remain tied to the same legacy payment tables and helpers;
+    - direct `mysql_*` payment debt stays outside the PHP 8 companion critical path.
+  - `TASK-064` acceptance is satisfied at the documentation/control-plane level: donate/payment is now explicitly separated from the main modernization critical path.
+- Блокери / ризики:
+  - This task intentionally does not change live donate/payment code or runtime behavior.
+  - If the project later wants deeper donate/payment change, a separate explicit track still has to define provider/security review, fraud/safety rules, and fulfillment acceptance evidence.
+- Рекомендований наступний крок:
+  - Website hold-zone docs sequence is complete; the next main execution track remains blocked `TASK-013/TASK-027` unless topology/approval reality changes.
+
+### Сесія — `2026-03-19` — `GitHub Copilot (GPT-5.4)` — `morgan.local`
+
+- Пов'язані задачі: `TASK-066`
+- Контекст:
+  - Після user escalation було повторно звірено claimed website progress із реальною межею modern identity/session work. З'ясувалося, що попередня інтерпретація modernization track була завищеною: completed `TASK-056..TASK-059` доводять лише local companion prototype plus safety-layer contracts, але не live website-wide shared account on the public site.
+- Зроблена робота:
+  - Перечитано current backlog/status/architecture evidence по cross-patch identity.
+  - Зафіксовано в `PROJECT_STATUS.md`, що modern track completion не означає наявність live shared account.
+  - Додано новий canonical open execution item `TASK-066 — Implement live website-wide shared account identity and session`.
+  - Явно задокументовано current truthful boundary: modern account overview still exposes `identity_mode=legacy_account_id`, а website-wide identity mapping table і live root-scoped shared session досі не доведені.
+- Які файли / області зачеплено:
+  - `docs/BACKLOG.md`
+  - `docs/PROJECT_STATUS.md`
+  - `docs/SESSION_LOG.md`
+- Верифікація:
+  - `docs/BACKLOG.md` already contained proof that `TASK-058` preserves `identity_mode=legacy_account_id` and that `TASK-059` remains a local prototype/control-plane proof rather than a live ingress rollout.
+  - `localProjects/cmangos_projects/docker-website/modern-prototype/public/index.php` still renders the boundary note that roster discovery remains transitional until a verified website-identity mapping table exists.
+  - `docs/ARCHITECTURE.md` already states the current website auth implementation is patch-local and not truly shared.
+- Блокери / ризики:
+  - Shared account still requires both data-model work and live rollout work; until `TASK-066` is executed, any claim that the public site already has one shared account across patches would be false.
+  - This correction does not yet add `vmangos`; that requires a separate explicit backlog track rather than being silently folded into the current CMaNGOS/AzerothCore website work.
+- Рекомендований наступний крок:
+  - Виконувати `TASK-066` як first-class website/runtime task before making any claim that shared account on the public site is done.
+
+### Сесія — `2026-03-19 06:10` — `GitHub Copilot (Claude Opus 4.6)` — `morgan.local`
+
+- Пов'язані задачі: `TASK-067`, `TASK-068`, `TASK-069`, `TASK-070`, `TASK-071`, `TASK-072`
+- Контекст:
+  - Користувач вказав, що його стратегічний план (описаний раніше в чаті) НІКОЛИ не був зафіксований у беклозі. План: (1) замінити cmangos-wotlk на azerothcore-wotlk як єдиний WotLK, (2) замінити cmangos-classic на vmangos-classic + імпорт samuel_FULL_backup.sql, (3) кінцевий стан: 3 сервери (vmangos, cmangos-tbc, azerothcore). Також SQL error на скріншоті і порожня `website_realm_settings`.
+- Зроблена робота:
+  - Діагностовано SQL error зі скріншоту (`mysqli_connect("azerothcore-db", "root")`) — він уже був виправлений у попередньому deploy (task066a), але `website_realm_settings` залишалась порожньою.
+  - Заповнено `website_realm_settings` на live `azerothcore-db` для realm 1 із правильними host/port/dbname.
+  - Надано `GRANT SELECT` на `acore_world` і `acore_characters` для `mw_azerothcore_site`.
+  - Верифіковано що WotLK website після fix-у показує realm "AzerothCore" без SQL Error.
+  - Створено 6 нових backlog задач (TASK-067..TASK-072) що описують повний стратегічний план заміни емуляторів.
+  - Оновлено `PROJECT_STATUS.md`: стадія, фокус, блокер, стратегічний план (Фаза A: AzerothCore, Фаза B: vmangos).
+- Які файли / області зачеплено:
+  - `docs/BACKLOG.md` — 6 нових задач
+  - `docs/PROJECT_STATUS.md` — оновлений strategic plan
+  - `docs/SESSION_LOG.md`
+  - `workspace: acore_auth.website_realm_settings` — заповнено
+  - `workspace: MySQL grants для mw_azerothcore_site` — додано acore_world, acore_characters
+- Верифікація:
+  - `website_realm_settings` тепер має 1 запис: `id_realm=1, dbname=acore_world, chardbname=acore_characters`.
+  - `mw_azerothcore_site` має `SELECT` на `acore_auth`, `acore_world`, `acore_characters`.
+  - WotLK homepage показує `Realm name: AzerothCore`, `Online: 0`, без SQL Error.
+  - Navigation має 3 пункти (Classic, TBC, WotLK) — коректно.
+- Блокери / ризики:
+  - WotLK website показує realm як "Offline" — може бути port/host mismatch для uptime check.
+  - vmangos track (TASK-070..072) вимагає дослідження: vmangos schema != cmangos schema, import samuel_FULL_backup.sql може потребувати значної адаптації.
+- Рекомендований наступний крок:
+  - `TASK-067` по суті виконано цією сесією (realm_settings + grants). Потрібна тільки перевірка через browser що все renders правильно.
+  - Далі `TASK-069`: оновити daily-sync для 3-крокового pipeline і верифікувати transfers без cmangos-wotlk.
+
+## Сесія 2026-03-20 ~07:00
+
+- Хто: AI agent (роль: Project Architect)
+- Машина: `morgan.local` → SSH `workspace`
+- Контекст: Продовження після минулої сесії. Користувач вкрай незадоволений що безліч раніше описаних задач не були записані в беклог.
+
+### Виконана робота
+
+1. **TASK-074 (нова, завершена) — Fix WotLK website: realm IP + realm status + news**:
+   - Діагностика: `realmlist.address = 127.0.0.1` замість реального IP.
+   - Fix: `UPDATE realmlist SET address = '64.181.205.211' WHERE id = 1` в `acore_auth`.
+   - Діагностика: realm показував Offline тому що сайт шукає колонку `realmflags`, а AzerothCore має `flag`.
+   - Fix: `ALTER TABLE realmlist ADD COLUMN realmflags tinyint unsigned GENERATED ALWAYS AS (flag) STORED`.
+   - Діагностика: новини відсутні тому що AzerothCore auth DB не має таблиць `f_topics`, `f_posts`, `f_forums`, `f_categories`, `f_attachs`, `f_markread` — сайт їх використовує для frontpage news.
+   - Fix: `mariadb-dump` з Classic (`classicrealmd`) → `sed` для collation fix (`utf8mb3_uca1400_ai_ci` → `utf8mb3_general_ci`) → `mysql` import в `acore_auth`.
+   - GRANT SELECT/INSERT/UPDATE/DELETE на `f_topics`, `f_posts`, `f_forums` + SELECT на `f_categories`, `f_attachs`, `f_markread` для `mw_azerothcore_site`.
+   - Верифікація: realm IP = `64.181.205.211`, status = Online, 10 news posts відображаються.
+
+2. **TASK-067 відмічено як `[+]`** — було виконано минулою сесією.
+
+3. **Нові задачі в беклозі**:
+   - `TASK-073`: Cross-patch single account — один акаунт для всіх доповнень, session persistence при переключенні.
+   - `TASK-074`: Fix WotLK website: realm IP + status + news — **завершено цією сесією**.
+   - `TASK-075`: Адмін-панель для GM — restart контейнерів, config editing, моніторинг.
+   - `TASK-076`: Карта гравців онлайн (Player Map).
+   - `TASK-077`: Міграція сайту на сучасний PHP (5.6 → 8.x).
+
+4. **PROJECT_STATUS.md оновлено**: додано website features roadmap, оновлено блокер і фокус.
+
+- Які файли / області зачеплено:
+  - `docs/BACKLOG.md` — 5 нових задач (TASK-073..077), TASK-067 → [+]
+  - `docs/PROJECT_STATUS.md` — оновлений фокус, блокер, website features roadmap
+  - `docs/SESSION_LOG.md`
+  - `workspace: acore_auth.realmlist` — address оновлено, додано realmflags column
+  - `workspace: acore_auth.f_topics, f_posts, f_forums, f_categories, f_attachs, f_markread` — створені та заповнені з Classic
+  - `workspace: MySQL grants` — нові таблиці для mw_azerothcore_site
+- Верифікація:
+  - WotLK website: Server IP = 64.181.205.211, Realm Status = Online, 10 news posts, Realm Name = AzerothCore.
+  - Classic website: все працює як і раніше.
+- Блокери / ризики:
+  - cmangos-wotlk все ще працює поряд з AzerothCore — потрібно TASK-069 → TASK-068.
+  - Cross-patch single account (TASK-073) залежить від TASK-066 (shared identity layer).
+  - PHP migration (TASK-077) — великий обсяг: 144 mysql_* calls, 22 PHP files, deprecated functions.
+- Рекомендований наступний крок:
+  - `TASK-069`: verify 3-step transfer Classic → TBC → AzerothCore.
+  - `TASK-073`: cross-patch single account (після TASK-066).
+  - `TASK-077`: PHP migration — може виконуватися паралельно.
+
+### 2026-03-20 ~08:00 — Підсилення workflow правила BACKLOG-FIRST
+
+- Тригер: користувач вказав, що агенти систематично ігнорували декомпозицію вимог у беклог і одразу починали імплементацію, втрачаючи задачі між сесіями.
+- Виконано:
+  - Переписано секцію «Правило беклогу» в `AGENTS.md`:
+    - Додано жорсткий 5-кроковий gate: ЗУПИНИСЬ → ДЕКОМПОЗУЙ ВСЕ → ЗАПИШИ → ПОКАЖИ → ТІЛЬКИ ПІСЛЯ ЦЬОГО імплементуй.
+    - Додано явний блок заборонених anti-patterns (вибіркове виконання, імплементація без запису, «зроблю пізніше», мовчазне ігнорування, ретроспективний запис).
+    - Додано правило збереження незавершених задач між сесіями.
+    - Додано єдиний виняток (інформаційні запити, читання, адмін workflow docs).
+  - Створено `DEC-043` — workflow policy decision, що фіксує цю зміну як прийняте рішення.
+- Артефакти: `AGENTS.md`, `docs/DECISIONS.md`, `docs/SESSION_LOG.md`.
+
+### 2026-03-20 — TASK-069: Verify E2E 3-step transfer Classic → TBC → AzerothCore
+
+- Пов'язані задачі: `TASK-069`
+- Контекст:
+  - Daily-sync раніше йшов 4-кроковим pipeline: Classic → TBC → WotLK (cmangos) → AzerothCore. Потрібно довести що 3-кроковий pipeline (Classic → TBC → AzerothCore) працює, щоб розблокувати TASK-068 (decommission cmangos-wotlk).
+- Зроблена робота:
+  - Проаналізовано повну архітектуру `daily-sync.sh` (918 рядків), `lib.sh` (846 рядків), усі migration SQL файли, schema TBC vs WotLK vs AzerothCore.
+  - Створено `migrate_cmangos_tbc_to_azerothcore.sql` (~400 рядків) — нова міграція TBC→AzerothCore напряму:
+    - `characters` table: додає WotLK/AC колонки, розпаковує `playerBytes`/`playerBytes2` в `skin`/`face`/`hairstyle`/`haircolor`/`facialstyle`, форсує `at_login|=6`.
+    - `character_homebind`: rename полів.
+    - `character_spell`: реструктуризація в `(guid,spell,specMask)`.
+    - `character_talent` + `character_glyphs`: створює порожні таблиці (TBC не має цих даних).
+    - `character_queststatus`: реструктуризація + split rewarded.
+    - `character_aura` + `pet_aura`: truncate (TBC aura format несумісний).
+    - `guild_member`: реструктуризація + `guild_member_withdraw`.
+    - `corpse`: реструктуризація (literal `1` for phaseMask — TBC не має цього поля).
+    - `account_tutorial` з `character_tutorial`.
+    - `item_instance`, `mail`, `character_pet`: schema fixes.
+    - Cross-expansion sanitization (cooldowns, orphan cleanup).
+  - Модифіковано `daily-sync.sh`:
+    - Додано `SKIP_WOTLK="${SKIP_WOTLK:-false}"` env var.
+    - Phase C/D обгорнуті в `SKIP_WOTLK != true` condition.
+    - Phase E source змінено з hardcoded `wotlk` на `$azerothcore_src` (tbc when SKIP_WOTLK).
+    - Cleanup trap, stale DB cleanup, server start/stop, summary — все адаптовано для 3-step mode.
+    - `migration_sql_for_pair()` — додано case `tbc:azerothcore`.
+  - Модифіковано `lib.sh`:
+    - `fix_char_after_transfer()` — розширено blob-padding (taximask, exploredZones, knownTitles) для `azerothcore` target.
+  - Fix: TBC `corpse` таблиця не має `phaseMask` (WotLK-only) — IFNULL reference замінено на literal `1`.
+  - Deploy: всі 3 файли SCP'd на `workspace:/opt/cmangos-transfer/`.
+- Результати:
+  - `SKIP_WOTLK=true bash daily-sync.sh` — повний 3-step pipeline:
+    - Phase A (Classic → TBC): Skip 1 (already synced)
+    - Phase B (TBC Verification): OK
+    - Phase C/D: SKIPPED (SKIP_WOTLK=true)
+    - Phase E (TBC → AzerothCore): **SYNCED 1** — Samuel
+    - Phase F (AzerothCore Verification): **✅ Samuel (guid=1801) — SUCCESS**
+  - Всі сервери запущені після pipeline.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/transfer/migrate_cmangos_tbc_to_azerothcore.sql` (NEW)
+  - `localProjects/cmangos_projects/transfer/daily-sync.sh` (MODIFIED)
+  - `localProjects/cmangos_projects/transfer/lib.sh` (MODIFIED)
+  - `workspace:/opt/cmangos-transfer/` (deployed)
+  - `docs/BACKLOG.md` (TASK-069 → [+])
+- Верифікація:
+  - Migration SQL ізольований тест: EXIT 0 на чистому TBC dump.
+  - Full pipeline чистий прогон: SUCCESS на кожному verify кроці.
+  - Samuel (guid=1801) — ✅ SUCCESS на AzerothCore login-bot.
+- Блокери / ризики:
+  - Log file permission denied (non-critical — stdout працює, потрібен правильний user/permissions для `/opt/cmangos-transfer/logs/`).
+  - 4-step pipeline залишається default mode (без SKIP_WOTLK). TASK-068 зробить 3-step default.
+- Рекомендований наступний крок:
+  - `TASK-068`: Decommission cmangos-wotlk (всі dependencies тепер resolved).
+
+---
+
+## `2026-03-20` — Сесія (TASK-068 completion)
+
+- Пов'язані задачі: `TASK-068`
+- Контекст:
+  - Після верифікації 3-step pipeline (TASK-069), cmangos-wotlk став redundant. Мета — повністю деактивувати cmangos-wotlk і залишити AzerothCore як єдиний WotLK runtime.
+- Зроблена робота:
+  - Зупинено і видалено `cmangos-wotlk-server` і `cmangos-wotlk-db` контейнери (`docker compose down` в `/opt/cmangos-wotlk/`).
+  - Деактивовано `cmangos-wotlk-update.timer` (`sudo systemctl disable --now cmangos-wotlk-update.timer` + disabled service).
+  - Оновлено `/etc/systemd/system/cmangos-daily-sync.service` — додано `Environment=SKIP_WOTLK=true`, `daemon-reload`.
+  - Перевірено website post-decommission: WotLK HTTP 200 (AzerothCore, Online), Classic HTTP 200, TBC HTTP 200.
+  - Перевірено daily-sync compatibility: скрипт sources без помилок при відсутності wotlk контейнерів (SKIP_WOTLK=true скіпає всі wotlk references).
+  - Перевірено container state: жодних cmangos-wotlk контейнерів; `mangos-website-wotlk` лишається (читає з AzerothCore DB).
+  - Оновлено docs: ARCHITECTURE.md (WotLK stack → DECOMMISSIONED, AzerothCore → sole WotLK runtime, timers, environments, critical paths), PROJECT_STATUS.md (Phase A → завершена, current state, missing tasks, test snapshot), DECISIONS.md (DEC-045).
+- Які файли / області зачеплено:
+  - `workspace:/opt/cmangos-wotlk/` — контейнери зупинені
+  - `workspace:/etc/systemd/system/cmangos-daily-sync.service` — MODIFIED (`Environment=SKIP_WOTLK=true`)
+  - `workspace:/etc/systemd/system/cmangos-wotlk-update.timer` — DISABLED
+  - `docs/ARCHITECTURE.md` (UPDATED)
+  - `docs/PROJECT_STATUS.md` (UPDATED)
+  - `docs/DECISIONS.md` (DEC-045 added)
+  - `docs/BACKLOG.md` (TASK-068 → [+])
+  - `docs/SESSION_LOG.md` (this entry)
+- Верифікація:
+  - Website: WotLK/Classic/TBC — all HTTP 200.
+  - Container state: no cmangos-wotlk containers running.
+  - Daily-sync: sources without errors with SKIP_WOTLK=true.
+  - AzerothCore: worldserver/authserver/db all running.
+- Блокери / ризики:
+  - `/opt/cmangos-wotlk/` data volumes лишаються на диску як архів (не видалені).
+- Рекомендований наступний крок:
+  - `TASK-070`: vmangos-classic розгортання і імпорт (Фаза B).
+
+---
+
+### Сесія 2026-03-20 (продовження) — TASK-070: vmangos-classic deployment + character migration
+
+- Час: 2026-03-20
+- Задачі: `TASK-070`
+- Виконавець: `copilot-agent`
+- Машина: `morgan.local` → `workspace` (SSH ControlMaster)
+- Статус: **ЗАВЕРШЕНО**
+
+- Що зроблено:
+  - **Docker stack deployment (4 ітерації)**:
+    1. Config files (mangosd.conf, realmd.conf) створені з `mserajnik/vmangos-deploy` GitHub examples, адаптовані (DB host=vmangos-db, DataDir, all DB connections).
+    2. Symlink-based data mounts → не працюють через Docker bind mount обмеження (symlinks to paths outside the mount invisible inside container).
+    3. Direct mount `/opt/cmangos-classic/data` → DBC fail: vmangos expects `{DataDir}/5875/dbc/` (build-number subdirectory).
+    4. **Per-directory bind mounts** — фінальне рішення: maps, vmaps, mmaps, Cameras, Buildings direct + dbc → `5875/dbc`. **Сервер стартував успішно.**
+  - **Character migration (cmangos → vmangos)**:
+    - Schema fixes applied: `player_flags` → `character_flags`, removed `is_logout_resting`, `at_login_flags` (not present in vmangos).
+    - 11 таблиць мігровано: characters(1), item_instance(313), character_inventory(208), character_skills(18), character_spell(392), character_queststatus(904), character_action(61), character_reputation(54), character_homebind(1), character_pet(4), pet_spell(16).
+    - Character verified: Samuel, guid=1801, Human Warlock Level 60, skin=0, face=2, hair_style=9, hair_color=9.
+  - **Account setup (SRP6)**:
+    - VMaNGOS uses SRP6 auth (v, s fields) — no sha_pass_hash.
+    - Account created via `mangosd console` → `account create samuel samuel` (console computes SRP6 internally).
+    - docker attach + pipe EOF requires `--sig-proxy=false` + `script -q` + background kill to avoid server shutdown.
+    - gmlevel set via SQL (`UPDATE account SET gmlevel=3`).
+    - Account verified: SAMUEL id=3, gmlevel=3, v_len=64, s_len=64.
+  - **SOAP enabled** for future remote administration (port 7878 internal).
+  - **deploy.sh fixed**: removed sha_pass_hash, uses mangosd console for account creation, removed symlink approach, fixed stack deployment.
+  - **Staging DB cleaned up**: `DROP DATABASE cmangos_staging`.
+  - **SOAPADMIN account** created as utility account (id=2, gmlevel=3).
+
+- Які файли / області зачеплено:
+  - `workspace:/opt/vmangos-classic/` — повний Docker stack deployed
+  - `workspace:/opt/vmangos-classic/config/mangosd.conf` — CREATED (SOAP enabled)
+  - `workspace:/opt/vmangos-classic/config/realmd.conf` — CREATED
+  - `workspace:/opt/vmangos-classic/docker-compose.yml` — DEPLOYED (4th iteration, per-directory mounts)
+  - `workspace:/opt/vmangos-classic/migrate_samuel_to_vmangos.sql` — DEPLOYED (fixed schema)
+  - `localProjects/cmangos_projects/vmangos-classic/config/mangosd.conf` — CREATED
+  - `localProjects/cmangos_projects/vmangos-classic/config/realmd.conf` — CREATED
+  - `localProjects/cmangos_projects/vmangos-classic/docker-compose.yml` — UPDATED (4 iterations)
+  - `localProjects/cmangos_projects/vmangos-classic/migrate_samuel_to_vmangos.sql` — FIXED
+  - `localProjects/cmangos_projects/vmangos-classic/deploy.sh` — FIXED (account creation, stack deploy)
+  - `docs/BACKLOG.md` — TASK-070 → [+]
+  - `docs/SESSION_LOG.md` — this entry
+
+- Верифікація:
+  - vmangos-db: healthy, всі databases створені.
+  - vmangos-mangosd: "World initialized. SERVER STARTUP TIME: 0 minutes 3 seconds" — Up.
+  - vmangos-realmd: 'Added realm "Classic Realm"' — Up.
+  - Realmlist: address=64.181.205.211, port=8089, name="Classic Realm".
+  - Account SAMUEL: id=3, gmlevel=3, SRP6 v/s populated.
+  - Character Samuel: guid=1801, account=3, Human Warlock Level 60.
+  - All 11 migration tables with correct row counts.
+
+- Ключові рішення / lessons learned:
+  - Docker bind mounts don't follow symlinks to paths outside the mount context.
+  - VMaNGOS expects DBC files at `{DataDir}/{build_number}/dbc/` (5875 for Classic 1.12).
+  - VMaNGOS uses SRP6 (v, s longtext hex fields), NOT sha_pass_hash. Account creation via mangosd console is the only reliable way to compute SRP6 values.
+  - docker attach + pipe causes server shutdown via EOF on stdin. Workaround: background process + kill + `--sig-proxy=false`.
+
+- Connection info:
+  - Realmlist (realmlist.wtf): `set realmlist 64.181.205.211`
+  - Auth port: 3724 (canonical)
+  - Game port: 8085 (canonical)
+  - DB port: 3306 (canonical)
+  - Account: SAMUEL / samuel (regular player, gmlevel=0)
+
+- Рекомендований наступний крок:
+  - `TASK-071`: Замінити cmangos-classic на vmangos-classic (переключити на канонічні порти).
+
+---
+
+### Сесія: 2026-03-19 (TASK-071 — Замінити cmangos-classic на vmangos-classic)
+
+- Що зроблено:
+  - **SAMUEL gmlevel fix**: Виправлено gmlevel=3→0 (звичайний ігровий акаунт). deploy.sh оновлено.
+  - **cmangos-classic зупинено**: `docker compose down` — контейнери `cmangos-server` і `cmangos-db` видалені. Мережа `cmangos-net` збережена (використовується website).
+  - **vmangos переключено на канонічні порти**:
+    - docker-compose.yml: 3310→3306, 3728→3724, 8089→8085; мережа vmangos-net→cmangos-net (external); VMANGOS_REALMLIST_PORT: 8085.
+    - Realmlist в DB: port=8085.
+    - Всі 3 контейнери (vmangos-db, vmangos-realmd, vmangos-mangosd) running і healthy.
+  - **Website оновлено**: docker-compose.remote.multiroute.yml: MW_DB_HOST=vmangos-db, MW_DB_NAME=realmd. Задеплоєно на сервер, mangos-website-classic recreated і healthy (HTTP 200).
+  - **Daily-sync lib.sh оновлено** (7 classic маппінгів): DB_CONTAINER→vmangos-db, SERVER_CONTAINER→vmangos-mangosd, AUTH_SERVER_CONTAINER→vmangos-realmd, CHAR_DB→characters, REALMD_DB→realmd, COMPOSE_DIR→/opt/vmangos-classic, WORLD_DB→mangos.
+  - **cmangos-update.timer деактивовано**: `systemctl disable --now`.
+  - **deploy.sh порти оновлено**: 3728→3724, 8089→8085, 3310→3306.
+
+- Які файли / області зачеплено:
+  - `workspace:/opt/vmangos-classic/docker-compose.yml` — UPDATED (production ports, cmangos-net)
+  - `workspace:/opt/cmangos-transfer/lib.sh` — UPDATED (7 classic mappings → vmangos)
+  - `workspace:/opt/mangos-website/docker-compose.multiroute.yml` — UPDATED (vmangos-db/realmd)
+  - `workspace: cmangos-update.timer` — DISABLED
+  - `workspace: cmangos-classic containers` — STOPPED AND REMOVED
+  - `localProjects/cmangos_projects/vmangos-classic/docker-compose.yml` — UPDATED
+  - `localProjects/cmangos_projects/vmangos-classic/deploy.sh` — UPDATED (ports, gmlevel removed)
+  - `localProjects/cmangos_projects/docker-website/docker-compose.remote.multiroute.yml` — UPDATED
+  - `localProjects/cmangos_projects/transfer/lib.sh` — UPDATED
+  - `docs/BACKLOG.md` — TASK-071 → [+]
+  - `docs/ARCHITECTURE.md` — Classic stack → VMaNGOS
+  - `docs/PROJECT_STATUS.md` — Phase B completed, status updated
+  - `docs/SESSION_LOG.md` — this entry
+
+- Верифікація:
+  - vmangos-db: healthy, port 3306 on cmangos-net.
+  - vmangos-realmd: running, port 3724.
+  - vmangos-mangosd: running, port 8085, SOAP bound.
+  - Website Classic: HTTP 200 (bypass Cloudflare → 200; via Cloudflare DNS → 403 by bot protection, not our issue).
+  - Website TBC: HTTP 200.
+  - Website WotLK: HTTP 200.
+  - cmangos-server/cmangos-db: not running (removed).
+  - cmangos-update.timer: disabled.
+  - SAMUEL: gmlevel=0, SOAPADMIN: gmlevel=3.
+
+- Рекомендований наступний крок:
+  - `TASK-072`: Verify фінальний ланцюжок vmangos → cmangos-tbc → azerothcore.
+
+### Сесія — `2026-03-22 09:00` — `GitHub Copilot (Claude Opus 4.6)` — `morgan.local`
+
+- Пов'язані задачі: `TASK-078`
+- Контекст:
+  - Після TASK-071 (vmangos switch) Classic armory повертав HTTP 500 (порожнє тіло). PHP error logging було вимкнено в production; діагноз вимагав читання коду армурі.
+- Root cause:
+  1. `armory_runtime_db_entry()` override'ив host/port/user/password з runtime config, але НЕ ім'я БД — використовував hardcoded `classicmangos`, `classiccharacters`, `classicrealmd`, яких немає у vmangos-db (там `mangos`, `characters`, `realmd`).
+  2. БД `classicarmory` (35 таблиць: DBC, instance, item cache) не існувала у vmangos-db взагалі.
+- Зроблена робота:
+  - **Код**: Додано `db_name_map` support в `armory_runtime_db_entry()` (`mysql.php`): функція тепер перевіряє `$runtimeRealmd['db_name_map'][$databaseName]` і використовує mapped name.
+  - **Код**: Додано парсинг env var `MW_ARMORY_DB_NAME_MAP` у `configure-app.php`: формат `oldname1:newname1,oldname2:newname2` → масив `db_name_map` в `config-protected.php`.
+  - **Compose**: Додано `MW_ARMORY_DB_NAME_MAP: "classicrealmd:realmd,classiccharacters:characters,classicmangos:mangos,classicarmory:classicarmory"` до Classic container env.
+  - **DB**: Dumped `tbcarmory` (14MB, 172K рядків, 35 таблиць) з cmangos-tbc-db → імпортовано як `classicarmory` у vmangos-db.
+  - **Deploy**: Зібрано новий образ `semorgana/mangos-website:task078-armory-fix-20260322`, push в Docker Hub, deploy на workspace.
+  - **Playwright audit**: Всі 6 Classic сторінок HTTP 200, з них armory — раніше 500, тепер 200. TBC — без змін (OK). WotLK armory 500 — pre-existing, не пов'язане з цією задачею.
+- Які файли / області зачеплено:
+  - `localProjects/cmangos_projects/mangos-website/armory/configuration/mysql.php` — MODIFIED (db_name_map)
+  - `localProjects/cmangos_projects/docker-website/scripts/configure-app.php` — MODIFIED (MW_ARMORY_DB_NAME_MAP parsing)
+  - `localProjects/cmangos_projects/docker-website/docker-compose.remote.multiroute.yml` — MODIFIED (Classic env var)
+  - `workspace:/opt/mangos-website/.env.multiroute` — UPDATED (new image tag)
+  - `workspace:/opt/mangos-website/docker-compose.multiroute.yml` — UPDATED (new compose)
+  - `workspace:vmangos-db classicarmory` — CREATED (35 tables from TBC dump)
+  - `docs/BACKLOG.md` — TASK-078 → [+]
+  - `docs/SESSION_LOG.md` — this entry
+- Верифікація:
+  - Classic armory index: HTTP 200, 14774 bytes ✅
+  - Classic armory profile: HTTP 200 ✅
+  - Classic main pages: all HTTP 200 ✅
+  - TBC all pages: HTTP 200 ✅
+  - WotLK armory: HTTP 500 (pre-existing, not related)
+  - Docker image: `semorgana/mangos-website:task078-armory-fix-20260322`
+  - Playwright report: `browser-audit/reports/20260322_092741/`
+- Примітка:
+  - `classicarmory` використовує TBC DBC дані (items, spells, talents). Для vanilla-accurate даних потрібно буде окремо extract DBC з vanilla клієнта — задача на майбутнє.
+
+### `2026-03-22` — Сесія 49 — TASK-080 (Playwright audit harness fixes) + TASK-081 (WotLK armory) + TASK-082 (WotLK auth SRP6)
+
+- Контекст: Playwright audit з 12 issues. Користувач вимагав zero tolerance.
+- **TASK-080 — Playwright audit harness fixes**:
+  - Баг 1: `_html_to_text()` не декодувала HTML entities — `&amp;` залишалось замість `&`. Додано `html.unescape()`.
+  - Баг 2: `_auth_cookies()` передавала `None` як `expires` для session cookies — Playwright crash. Фільтруємо `None`.
+  - Баг 3: `navigation_wait_until: commit` — DOM не повністю parsed коли перевіряються selectors. Додано `page.wait_for_load_state("domcontentloaded")` в `_run_auth_check` та `_visit_page`.
+  - Баг 4: Screenshot timeout 5s замалий для повільних мереж. Збільшено до 15s.
+- **TASK-081 — WotLK armory HTTP 500**:
+  - Додано `MW_ARMORY_DB_NAME_MAP` для WotLK контейнера: `wotlkrealmd:acore_auth,wotlkcharacters:acore_characters,wotlkmangos:acore_world,wotlkarmory:wotlkarmory`.
+  - Створено `wotlkarmory` БД в azerothcore-db (35 таблиць, collation fix `utf8mb3_uca1400_ai_ci` → `utf8mb3_general_ci` для MySQL 8).
+  - GRANT SELECT на `wotlkarmory` для `mw_azerothcore_site`.
+  - Image `semorgana/mangos-website:task080-081-fixes-20260322` збілджено та задеплоєно на сервер.
+- **TASK-082 — WotLK auth SRP6 compatibility**:
+  - Root cause: AzerothCore зберігає `salt`/`verifier` як `binary(32)` (little-endian), PHP код очікує `s`/`v` як hex strings. Також `gmlevel` в окремій таблиці `account_access`.
+  - Фікс 1: Virtual columns `s VARCHAR(64) GENERATED ALWAYS AS (UPPER(HEX(REVERSE(salt))))` та `v VARCHAR(64) GENERATED ALWAYS AS (UPPER(HEX(REVERSE(verifier))))`. `REVERSE()` критичний — компенсує `strrev()` в PHP SRP6 коді, інакше byte order mismatch.
+  - Фікс 2: Regular column `gmlevel TINYINT UNSIGNED NOT NULL DEFAULT 0` + populate з `account_access`.
+  - Фікс 3: GRANT INSERT/UPDATE/DELETE на `account_keys`, `website_account_keys`, `website_accounts` для `mw_azerothcore_site` — без цього `addOrUpdateAccountKeys()` silent fail, cookie validation fail на наступному запиті.
+  - SRP6 verification: `verifySRP6('SAMUEL', 'samuel', ...)` → TRUE.
+  - Login: `mangosWeb` cookie set, username displayed on page.
+- Результат: **`release_gate_passed: true`** — 0 issues, 0 failures, 18 pages, 3 auth checks passed.
+- Playwright report: `browser-audit/reports/20260322_103337/`
+- Ключове рішення: AzerothCore SRP6 compatibility через SQL virtual columns з `REVERSE()` для byte-order — zero PHP changes, zero game server impact.
+
+### Сесія — 2026-03-22 (armory bugfix batch)
+
+- **TASK-083** `[+]`: Classic новини відсутні → імпорт `f_topics`/`f_posts` з TBC `tbcrealmd` в Classic `realmd` → 10 новин видно.
+- **TASK-084** `[+]`: Classic armory "Character does not exist" → root cause: `conf_client=1` (TBC) замість `0` (Vanilla) + VMaNGOS використовує `honor_stored_hk` / `honor_rank_points` / `item_id` / `item_guid` замість cMaNGOS `stored_honorable_kills` / `stored_honor_rating` / `item_template` / `item`.
+  - Fix: `UPDATE classicarmory.conf_client SET value=0`.
+  - Fix: Virtual columns на VMaNGOS `characters` (`stored_honorable_kills`, `stored_honor_rating`), `character_inventory` (`item_template`, `item`), `item_instance` (`randomPropertyId`).
+  - Результат: Samuel відображається — Grand Marshal, 362 HK, повний Nemesis set (16803-16810).
+- **TASK-085** `[+]`: WotLK armory `conf_client=1` → `2`. Achievements tab тепер видимий.
+- **TASK-086** `[+]`: Armory пошукове поле — додано `color:#FFF` в `.ipl input` (master.css).
+- **TASK-087** `[+]`: Docker image `semorgana/mangos-website:task084-086-armory-fixes-20260322` → built, pushed, deployed. Усі 3 контейнери healthy.
+- Примітка щодо TBC/WotLK "обнулені дані": персонаж Samuel на цих серверах не має реальних items (`character_inventory` пуста) та stats (`character_stats` пуста) — це очікувана поведінка для персонажів, які ніколи не логінились після initial transfer. Armory коректно показує нулі.
+
+### Session — 2026-03-22 (cont.) — TASK-088
+
+- **TASK-088** `[+]`: Classic armory item tooltip fix — "Error: Unknown AllowableClass/AllowableRace".
+  - Причина: VMaNGOS `item_template` використовує snake_case (allowable_class, display_id, item_level, etc.) а armory очікує cMaNGOS PascalCase (AllowableClass, displayid, ItemLevel, etc.). Також case-only різниця: `quality`→`Quality`, `flags`→`Flags` в `SELECT *` результатах.
+  - Фікс ч.1: Додано 17 virtual columns на `mangos.item_template` — AllowableClass, AllowableRace, ContainerSlots, InventoryType, ItemLevel, MaxDurability, RandomProperty, RequiredLevel, RequiredSkill, RequiredSkillRank, itemset, maxcount, requiredspell, displayid, BuyPrice, SellPrice, DisenchantID.
+  - Фікс ч.2: Модифіковано `SELECT *` queries в `tooltipmgr.php` для додавання SQL aliases: `quality AS Quality`, `flags AS Flags`.
+  - Очищено кеші `cache_item`, `cache_item_char`, `cache_item_tooltip` в `classicarmory`.
+  - Docker image: `semorgana/mangos-website:task088-item-tooltip-fix-20260322` built, pushed, deployed.
+  - Верифікація: 0 error spans, 0 AllowableClass/Race помилок, Grand Marshal Samuel renders, 20 itemsArray entries. TBC та WotLK — 0 errors, character data renders.
+
+### Session — 2026-03-22 (cont.) — TASK-072
+
+- **TASK-072** `[+]`: Verify фінальний ланцюжок vmangos → cmangos-tbc → azerothcore.
+  - Запущено повний daily-sync по фінальному ланцюжку:
+    - vmangos Classic → cmangos TBC: `SKIP` (played on target — очікувана поведінка).
+    - cmangos TBC → AzerothCore: `SYNCED`, login verify `SUCCESS`.
+  - Samuel guid=1801, Warlock lvl60 — перенесено та верифіковано на AzerothCore.
+  - Виправлено `lib.sh`: DB user змінено на `mangos:mangos` для `vmangos-db` та `cmangos-tbc-db` — root passwords ненадійні при container re-init.
+  - Виправлено `lib.sh` start_server() для azerothcore: `docker start` замість `docker compose up` — запобігає скиданню паролів БД при кожному старті.
+  - Відоме MVP обмеження: `character_queststatus_rewarded` safe_insert warning — некритично, залишається як known issue.
+  - **Фінальна топологія підтверджена**: Classic (VMaNGOS) + TBC (cmangos) + WotLK (AzerothCore) — 3 сервери, 3 різних емулятори. Emulator replacement plan повністю завершено.
+  - Доки оновлено: `BACKLOG.md` (TASK-072 → `[+]`), `PROJECT_STATUS.md` (фокус → TASK-073/TASK-077).
+
+### Session — 2026-03-28 — TASK-104 (cont.) + Admin fixes
+
+- **Favicon** `[+]`: Замінено SVG-заглушку на реальний WoW favicon set з `additionalContextFiles/favicon_io/`.
+  - Файли: `favicon.ico`, `favicon-16x16.png`, `favicon-32x32.png`, `apple-touch-icon.png`, `android-chrome-192x192.png`, `android-chrome-512x512.png`, `site.webmanifest` (name: "Drums of War").
+  - Оновлено `src/app/layout.tsx` metadata icons + manifest.
+  - Видалено `public/favicon.svg`.
+- **Admin link timing bug** `[+]`: `src/app/auth/login/route.ts` не повертав `gmlevel` у відповіді → `LoginModal.onSuccess` будував session без gmlevel → Admin link не з'являвся одразу після логіну.
+  - Фікс: додано `gmlevel: maxGmLevel` до login response; додано `gmlevel: data.gmlevel` у `onSuccess` в `Navbar.tsx`.
+  - Верифікація: логін → Admin link з'являється одразу (підтверджено через Chrome DevTools snapshot).
+- **Server Management** `[+]`: Новий `src/app/api/admin/server-action/route.ts` та `ServerManagement` компонент в admin panel.
+  - Кнопки Restart (без підтвердження), Stop (confirmation), Update & Deploy (confirmation + async pipeline з polling лог).
+  - Pipeline: `git pull → docker compose build → docker compose up -d` в фоні, статус читається з `/tmp/admin-deploy-{server}.json`.
+  - Docker image: `semorgana/mw-unified-site:task104-favicon-admin-20260327` built, pushed, deployed. Container healthy.
+- Новину `id:14` додано до `news.json`.

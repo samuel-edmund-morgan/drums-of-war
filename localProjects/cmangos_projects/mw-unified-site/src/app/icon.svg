@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <defs>
+    <linearGradient id="drumBody" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffa500"/>
+      <stop offset="100%" stop-color="#cc5500"/>
+    </linearGradient>
+    <linearGradient id="drumTop" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffe0a0"/>
+      <stop offset="100%" stop-color="#e8a030"/>
+    </linearGradient>
+  </defs>
+  <!-- Background -->
+  <rect width="32" height="32" rx="4" fill="#0a0a0c"/>
+  <!-- Drum body -->
+  <ellipse cx="16" cy="24" rx="10" ry="3" fill="#8B4513"/>
+  <rect x="6" y="14" width="20" height="10" fill="url(#drumBody)" rx="1"/>
+  <!-- Drum side bands -->
+  <rect x="6" y="16" width="20" height="1.5" fill="#ff6b00" opacity="0.6"/>
+  <rect x="6" y="20" width="20" height="1.5" fill="#ff6b00" opacity="0.6"/>
+  <!-- Drum top (skin) -->
+  <ellipse cx="16" cy="14" rx="10" ry="3.5" fill="url(#drumTop)"/>
+  <ellipse cx="16" cy="14" rx="7" ry="2.2" fill="none" stroke="#cc8800" stroke-width="0.5" opacity="0.5"/>
+  <!-- Left drumstick -->
+  <line x1="4" y1="5" x2="13" y2="13" stroke="#deb887" stroke-width="1.8" stroke-linecap="round"/>
+  <circle cx="4" cy="5" r="1.8" fill="#ffa500"/>
+  <!-- Right drumstick -->
+  <line x1="28" y1="5" x2="19" y2="13" stroke="#deb887" stroke-width="1.8" stroke-linecap="round"/>
+  <circle cx="28" cy="5" r="1.8" fill="#ffa500"/>
+</svg>

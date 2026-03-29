@@ -1,0 +1,39 @@
+services:
+  wow-auth-proxy:
+    image: ${AUTH_PROXY_IMAGE:-semorgana/wow-auth-proxy:latest}
+    container_name: wow-auth-proxy
+    restart: unless-stopped
+    ports:
+      - "3724:3724"
+    environment:
+      PROXY_LISTEN_PORT: "3724"
+      VANILLA_AUTH_HOST: vmangos-realmd
+      VANILLA_AUTH_PORT: "3724"
+      TBC_AUTH_HOST: cmangos-tbc-server
+      TBC_AUTH_PORT: "3724"
+      WOTLK_AUTH_HOST: azerothcore-authserver
+      WOTLK_AUTH_PORT: "3724"
+      LOG_LEVEL: INFO
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import socket; s=socket.socket(); s.settimeout(2); s.connect(('127.0.0.1',3724)); s.close()\" || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - classic_net
+      - tbc_net
+      - wotlk_net
+
+networks:
+  classic_net:
+    external: true
+    name: cmangos-net
+  tbc_net:
+    external: true
+    name: cmangos-tbc-net
+  wotlk_net:
+    external: true
+    name: azerothcore-net

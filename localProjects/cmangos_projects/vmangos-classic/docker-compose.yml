@@ -1,0 +1,130 @@
+# ============================================================================
+# VMaNGOS Classic — Docker Compose (Production)
+# ============================================================================
+# Deploy: /opt/vmangos-classic/docker-compose.yml
+#
+# Based on: mserajnik/vmangos-deploy (ghcr.io/mserajnik/vmangos-server:5875)
+# Replaces cmangos-classic as canonical Classic emulator (TASK-071).
+#
+# Services:
+#   vmangos-db      — MariaDB database (persistent volume)
+#   vmangos-realmd  — Login/Auth server (realmd)
+#   vmangos-mangosd — World server (mangosd)
+#
+# Ports (canonical Classic):
+#   3724  — Realm/Login server (realmd)
+#   8085  — World server (mangosd)
+#   3306  — MariaDB (external access)
+#
+# Usage:
+#   docker compose up -d          # Start all services
+#   docker compose down           # Stop all services
+#   docker compose logs -f        # Follow logs
+#   docker compose exec vmangos-db mariadb -u root -p  # DB shell
+# ============================================================================
+
+services:
+  # ==========================================================================
+  # MariaDB Database
+  # ==========================================================================
+  vmangos-db:
+    image: ghcr.io/mserajnik/vmangos-database:latest
+    container_name: vmangos-db
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: "${MARIADB_ROOT_PASSWORD}"
+      MARIADB_USER: "${MARIADB_USER:-mangos}"
+      MARIADB_PASSWORD: "${MARIADB_PASSWORD:-mangos}"
+      # Realm configuration (auto-creates realmlist entry)
+      VMANGOS_REALMLIST_NAME: "Classic Realm"
+      VMANGOS_REALMLIST_ADDRESS: "${SERVER_PUBLIC_IP}"
+      VMANGOS_REALMLIST_PORT: "8085"
+    volumes:
+      - vmangos-db-data:/var/lib/mysql
+      - ./custom-sql:/docker-entrypoint-initdb.d/custom-sql
+    ports:
+      - "3306:3306"
+    networks:
+      - cmangos-net
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    stop_grace_period: 30s
+
+  # ==========================================================================
+  # Realm/Login Server (realmd)
+  # ==========================================================================
+  vmangos-realmd:
+    image: ghcr.io/mserajnik/vmangos-server:5875
+    container_name: vmangos-realmd
+    restart: unless-stopped
+    depends_on:
+      vmangos-db:
+        condition: service_healthy
+    command: realmd
+    environment:
+      VMANGOS_DATABASE_HOST: vmangos-db
+      VMANGOS_DATABASE_PORT: "3306"
+      VMANGOS_DATABASE_USER: mangos
+      VMANGOS_DATABASE_PASSWORD: mangos
+    volumes:
+      - ./config:/opt/vmangos/config:ro
+      - vmangos-logs:/opt/vmangos/storage/logs
+    ports:
+      - "3724:3724"
+    networks:
+      - cmangos-net
+
+  # ==========================================================================
+  # World Server (mangosd)
+  # ==========================================================================
+  vmangos-mangosd:
+    image: ghcr.io/mserajnik/vmangos-server:5875
+    container_name: vmangos-mangosd
+    restart: unless-stopped
+    depends_on:
+      vmangos-db:
+        condition: service_healthy
+    command: mangosd
+    environment:
+      VMANGOS_DATABASE_HOST: vmangos-db
+      VMANGOS_DATABASE_PORT: "3306"
+      VMANGOS_DATABASE_USER: mangos
+      VMANGOS_DATABASE_PASSWORD: mangos
+    volumes:
+      - ./config:/opt/vmangos/config:ro
+      - vmangos-logs:/opt/vmangos/storage/logs
+      # Extracted client data — individual mounts because vmangos expects
+      # dbc in {DataDir}/5875/dbc/ (build-number subdirectory)
+      - /opt/cmangos-classic/data/maps:/opt/vmangos/storage/extracted-data/maps:ro
+      - /opt/cmangos-classic/data/vmaps:/opt/vmangos/storage/extracted-data/vmaps:ro
+      - /opt/cmangos-classic/data/mmaps:/opt/vmangos/storage/extracted-data/mmaps:ro
+      - /opt/cmangos-classic/data/dbc:/opt/vmangos/storage/extracted-data/5875/dbc:ro
+      - /opt/cmangos-classic/data/Cameras:/opt/vmangos/storage/extracted-data/Cameras:ro
+      - /opt/cmangos-classic/data/Buildings:/opt/vmangos/storage/extracted-data/Buildings:ro
+    ports:
+      - "8085:8085"
+    networks:
+      - cmangos-net
+    tty: true
+    stdin_open: true
+    stop_grace_period: 30s
+
+# ==========================================================================
+# Volumes
+# ==========================================================================
+volumes:
+  vmangos-db-data:
+    name: vmangos-db-data
+  vmangos-logs:
+    name: vmangos-logs
+
+# ==========================================================================
+# Networks
+# ==========================================================================
+networks:
+  cmangos-net:
+    external: true

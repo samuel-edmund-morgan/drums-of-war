@@ -1,0 +1,162 @@
+# ============================================================================
+# AzerothCore WotLK — Draft Docker Compose for Phase 16.1
+# ============================================================================
+# Purpose:
+#   - Provide a local deployment draft for the future 4-step pipeline
+#     Classic -> TBC -> WotLK -> AzerothCore.
+#   - Stay close to the official AzerothCore docker layout while reserving
+#     non-conflicting ports next to the current CMaNGOS stacks.
+#
+# Deployment modes:
+#   1. Preferred on ARM64: clone `azerothcore-wotlk` and run
+#        docker compose up -d --build
+#      The local build path uses the official Dockerfile targets.
+#   2. Optional amd64/prebuilt path: omit `--build` and let compose pull the
+#      `acore/*` images referenced below.
+#
+# Required prep:
+#   - Copy `.env.example` to `.env`
+#   - Clone official sources next to this folder, by default:
+#       ../azerothcore-wotlk
+# ============================================================================
+
+services:
+  azerothcore-db:
+    image: mysql:8.4
+    command:
+      - --character-set-server=utf8mb3
+      - --collation-server=utf8mb3_general_ci
+      - --mysql-native-password=ON
+      - --authentication-policy=mysql_native_password
+    container_name: azerothcore-db
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: "${DOCKER_DB_ROOT_PASSWORD:-change_me}"
+    volumes:
+      - "${DOCKER_VOL_DB:-azerothcore-db-data}:/var/lib/mysql"
+    ports:
+      - "${DOCKER_DB_EXTERNAL_PORT:-3309}:3306"
+    networks:
+      - azerothcore-net
+    healthcheck:
+      test: "/usr/bin/mysql --user=root --password=$$MYSQL_ROOT_PASSWORD --execute \"SHOW DATABASES;\""
+      interval: 5s
+      timeout: 10s
+      retries: 40
+
+  azerothcore-db-import:
+    image: "acore/ac-wotlk-db-import:${DOCKER_IMAGE_TAG:-master}"
+    container_name: azerothcore-db-import
+    build:
+      context: "${AZEROTHCORE_SRC:-../azerothcore-wotlk}"
+      dockerfile: apps/docker/Dockerfile
+      target: db-import
+      args:
+        USER_ID: "${DOCKER_USER_ID:-1000}"
+        GROUP_ID: "${DOCKER_GROUP_ID:-1000}"
+        DOCKER_USER: "${DOCKER_USER:-acore}"
+    restart: "no"
+    environment:
+      AC_DATA_DIR: "/azerothcore/env/dist/data"
+      AC_LOGS_DIR: "/azerothcore/env/dist/logs"
+      AC_LOGIN_DATABASE_INFO: "azerothcore-db;3306;root;${DOCKER_DB_ROOT_PASSWORD:-change_me};acore_auth"
+      AC_WORLD_DATABASE_INFO: "azerothcore-db;3306;root;${DOCKER_DB_ROOT_PASSWORD:-change_me};acore_world"
+      AC_CHARACTER_DATABASE_INFO: "azerothcore-db;3306;root;${DOCKER_DB_ROOT_PASSWORD:-change_me};acore_characters"
+    volumes:
+      - "${DOCKER_VOL_ETC:-./env/etc}:/azerothcore/env/dist/etc"
+      - "${DOCKER_VOL_LOGS:-./env/logs}:/azerothcore/env/dist/logs"
+    depends_on:
+      azerothcore-db:
+        condition: service_healthy
+    networks:
+      - azerothcore-net
+
+  azerothcore-client-data-init:
+    image: "acore/ac-wotlk-client-data:${DOCKER_IMAGE_TAG:-master}"
+    container_name: azerothcore-client-data-init
+    build:
+      context: "${AZEROTHCORE_SRC:-../azerothcore-wotlk}"
+      dockerfile: apps/docker/Dockerfile
+      target: client-data
+      args:
+        USER_ID: "${DOCKER_USER_ID:-1000}"
+        GROUP_ID: "${DOCKER_GROUP_ID:-1000}"
+        DOCKER_USER: "${DOCKER_USER:-acore}"
+    restart: "no"
+    volumes:
+      - "${DOCKER_VOL_DATA:-azerothcore-client-data}:/azerothcore/env/dist/data"
+
+  azerothcore-worldserver:
+    image: "acore/ac-wotlk-worldserver:${DOCKER_IMAGE_TAG:-master}"
+    container_name: azerothcore-worldserver
+    build:
+      context: "${AZEROTHCORE_SRC:-../azerothcore-wotlk}"
+      dockerfile: apps/docker/Dockerfile
+      target: worldserver
+      args:
+        USER_ID: "${DOCKER_USER_ID:-1000}"
+        GROUP_ID: "${DOCKER_GROUP_ID:-1000}"
+        DOCKER_USER: "${DOCKER_USER:-acore}"
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+    environment:
+      AC_DATA_DIR: "/azerothcore/env/dist/data"
+      AC_LOGS_DIR: "/azerothcore/env/dist/logs"
+      AC_LOGIN_DATABASE_INFO: "azerothcore-db;3306;root;${DOCKER_DB_ROOT_PASSWORD:-change_me};acore_auth"
+      AC_WORLD_DATABASE_INFO: "azerothcore-db;3306;root;${DOCKER_DB_ROOT_PASSWORD:-change_me};acore_world"
+      AC_CHARACTER_DATABASE_INFO: "azerothcore-db;3306;root;${DOCKER_DB_ROOT_PASSWORD:-change_me};acore_characters"
+    volumes:
+      - "${DOCKER_VOL_ETC:-./env/etc}:/azerothcore/env/dist/etc"
+      - "${DOCKER_VOL_LOGS:-./env/logs}:/azerothcore/env/dist/logs"
+      - "${DOCKER_VOL_DATA:-azerothcore-client-data}:/azerothcore/env/dist/data:ro"
+    ports:
+      - "${DOCKER_WORLD_EXTERNAL_PORT:-8088}:8085"
+      - "${DOCKER_SOAP_EXTERNAL_PORT:-7879}:7878"
+    depends_on:
+      azerothcore-db:
+        condition: service_healthy
+      azerothcore-db-import:
+        condition: service_completed_successfully
+      azerothcore-client-data-init:
+        condition: service_completed_successfully
+    networks:
+      - azerothcore-net
+
+  azerothcore-authserver:
+    image: "acore/ac-wotlk-authserver:${DOCKER_IMAGE_TAG:-master}"
+    container_name: azerothcore-authserver
+    build:
+      context: "${AZEROTHCORE_SRC:-../azerothcore-wotlk}"
+      dockerfile: apps/docker/Dockerfile
+      target: authserver
+      args:
+        USER_ID: "${DOCKER_USER_ID:-1000}"
+        GROUP_ID: "${DOCKER_GROUP_ID:-1000}"
+        DOCKER_USER: "${DOCKER_USER:-acore}"
+    tty: true
+    restart: unless-stopped
+    environment:
+      AC_LOGS_DIR: "/azerothcore/env/dist/logs"
+      AC_TEMP_DIR: "/azerothcore/env/dist/temp"
+      AC_LOGIN_DATABASE_INFO: "azerothcore-db;3306;root;${DOCKER_DB_ROOT_PASSWORD:-change_me};acore_auth"
+    volumes:
+      - "${DOCKER_VOL_ETC:-./env/etc}:/azerothcore/env/dist/etc"
+      - "${DOCKER_VOL_LOGS:-./env/logs}:/azerothcore/env/dist/logs"
+    ports:
+      - "${DOCKER_AUTH_EXTERNAL_PORT:-3727}:3724"
+    depends_on:
+      azerothcore-db:
+        condition: service_healthy
+      azerothcore-db-import:
+        condition: service_completed_successfully
+    networks:
+      - azerothcore-net
+
+volumes:
+  azerothcore-db-data:
+  azerothcore-client-data:
+
+networks:
+  azerothcore-net:
+    name: azerothcore-net

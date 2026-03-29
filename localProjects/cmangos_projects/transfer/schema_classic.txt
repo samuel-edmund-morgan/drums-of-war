@@ -1,0 +1,454 @@
+===CLASSIC SCHEMA===
+account_data	account	1	int(11) unsigned	NO	0	PRI
+account_data	type	2	int(11) unsigned	NO	0	PRI
+account_data	time	3	bigint(11) unsigned	NO	0	
+account_data	data	4	longblob	NO	NULL	
+account_instances_entered	AccountId	1	int(11) unsigned	NO	NULL	PRI
+account_instances_entered	ExpireTime	2	bigint(40)	NO	NULL	
+account_instances_entered	InstanceId	3	int(11) unsigned	NO	NULL	PRI
+ahbot_items	item	1	int(11) unsigned	NO	0	PRI
+ahbot_items	value	2	int(11) unsigned	NO	0	
+ahbot_items	add_chance	3	int(11) unsigned	NO	0	
+ahbot_items	min_amount	4	int(11) unsigned	NO	0	
+ahbot_items	max_amount	5	int(11) unsigned	NO	0	
+auction	id	1	int(11) unsigned	NO	0	PRI
+auction	houseid	2	int(11) unsigned	NO	0	
+auction	itemguid	3	int(11) unsigned	NO	0	
+auction	item_template	4	int(11) unsigned	NO	0	
+auction	item_count	5	int(11) unsigned	NO	0	
+auction	item_randompropertyid	6	int(11)	NO	0	
+auction	itemowner	7	int(11) unsigned	NO	0	
+auction	buyoutprice	8	int(11)	NO	0	
+auction	time	9	bigint(40) unsigned	NO	0	
+auction	buyguid	10	int(11) unsigned	NO	0	
+auction	lastbid	11	int(11)	NO	0	
+auction	startbid	12	int(11)	NO	0	
+auction	deposit	13	int(11)	NO	0	
+bugreport	id	1	int(11)	NO	NULL	PRI
+bugreport	type	2	longtext	NO	NULL	
+bugreport	content	3	longtext	NO	NULL	
+characters	guid	1	int(10) unsigned	NO	0	PRI
+characters	account	2	int(10) unsigned	NO	0	MUL
+characters	name	3	varchar(12)	NO	''	MUL
+characters	race	4	tinyint(3) unsigned	NO	0	
+characters	class	5	tinyint(3) unsigned	NO	0	
+characters	gender	6	tinyint(3) unsigned	NO	0	
+characters	level	7	tinyint(3) unsigned	NO	0	
+characters	xp	8	int(10) unsigned	NO	0	
+characters	money	9	int(10) unsigned	NO	0	
+characters	playerBytes	10	int(10) unsigned	NO	0	
+characters	playerBytes2	11	int(10) unsigned	NO	0	
+characters	playerFlags	12	int(10) unsigned	NO	0	
+characters	position_x	13	float	NO	0	
+characters	position_y	14	float	NO	0	
+characters	position_z	15	float	NO	0	
+characters	map	16	int(10) unsigned	NO	0	
+characters	orientation	17	float	NO	0	
+characters	taximask	18	longtext	YES	NULL	
+characters	online	19	tinyint(3) unsigned	NO	0	MUL
+characters	cinematic	20	tinyint(3) unsigned	NO	0	
+characters	totaltime	21	int(10) unsigned	NO	0	
+characters	leveltime	22	int(10) unsigned	NO	0	
+characters	logout_time	23	bigint(20) unsigned	NO	0	
+characters	is_logout_resting	24	tinyint(3) unsigned	NO	0	
+characters	rest_bonus	25	float	NO	0	
+characters	resettalents_cost	26	int(10) unsigned	NO	0	
+characters	resettalents_time	27	bigint(20) unsigned	NO	0	
+characters	trans_x	28	float	NO	0	
+characters	trans_y	29	float	NO	0	
+characters	trans_z	30	float	NO	0	
+characters	trans_o	31	float	NO	0	
+characters	transguid	32	bigint(20) unsigned	NO	0	
+characters	extra_flags	33	int(10) unsigned	NO	0	
+characters	stable_slots	34	tinyint(3) unsigned	NO	0	
+characters	at_login	35	int(10) unsigned	NO	0	
+characters	zone	36	int(10) unsigned	NO	0	
+characters	death_expire_time	37	bigint(20) unsigned	NO	0	
+characters	taxi_path	38	text	YES	NULL	
+characters	honor_highest_rank	39	int(10) unsigned	NO	0	
+characters	honor_standing	40	int(10) unsigned	NO	0	
+characters	stored_honor_rating	41	float	NO	0	
+characters	stored_dishonorable_kills	42	int(11)	NO	0	
+characters	stored_honorable_kills	43	int(11)	NO	0	
+characters	watchedFaction	44	int(10) unsigned	NO	0	
+characters	drunk	45	smallint(5) unsigned	NO	0	
+characters	health	46	int(10) unsigned	NO	0	
+characters	power1	47	int(10) unsigned	NO	0	
+characters	power2	48	int(10) unsigned	NO	0	
+characters	power3	49	int(10) unsigned	NO	0	
+characters	power4	50	int(10) unsigned	NO	0	
+characters	power5	51	int(10) unsigned	NO	0	
+characters	exploredZones	52	longtext	YES	NULL	
+characters	equipmentCache	53	longtext	YES	NULL	
+characters	ammoId	54	int(10) unsigned	NO	0	
+characters	actionBars	55	tinyint(3) unsigned	NO	0	
+characters	grantableLevels	56	int(10) unsigned	YES	0	
+characters	fishingSteps	57	tinyint(3) unsigned	NO	0	
+characters	deleteInfos_Account	58	int(10) unsigned	YES	NULL	
+characters	deleteInfos_Name	59	varchar(12)	YES	NULL	
+characters	deleteDate	60	bigint(20) unsigned	YES	NULL	
+character_account_data	guid	1	int(10) unsigned	NO	0	PRI
+character_account_data	type	2	int(10) unsigned	NO	0	PRI
+character_account_data	time	3	bigint(20) unsigned	NO	0	
+character_account_data	data	4	longblob	NO	NULL	
+character_action	guid	1	int(10) unsigned	NO	0	PRI
+character_action	button	2	tinyint(3) unsigned	NO	0	PRI
+character_action	action	3	int(10) unsigned	NO	0	
+character_action	type	4	tinyint(3) unsigned	NO	0	
+character_aura	guid	1	int(10) unsigned	NO	0	PRI
+character_aura	caster_guid	2	bigint(20) unsigned	NO	0	PRI
+character_aura	item_guid	3	int(10) unsigned	NO	0	PRI
+character_aura	spell	4	int(10) unsigned	NO	0	PRI
+character_aura	stackcount	5	int(10) unsigned	NO	1	
+character_aura	remaincharges	6	int(10) unsigned	NO	0	
+character_aura	basepoints0	7	int(11)	NO	0	
+character_aura	basepoints1	8	int(11)	NO	0	
+character_aura	basepoints2	9	int(11)	NO	0	
+character_aura	periodictime0	10	int(10) unsigned	NO	0	
+character_aura	periodictime1	11	int(10) unsigned	NO	0	
+character_aura	periodictime2	12	int(10) unsigned	NO	0	
+character_aura	maxduration	13	int(11)	NO	0	
+character_aura	remaintime	14	int(11)	NO	0	
+character_aura	effIndexMask	15	int(10) unsigned	NO	0	
+character_battleground_data	guid	1	int(11) unsigned	NO	0	PRI
+character_battleground_data	instance_id	2	int(11) unsigned	NO	0	
+character_battleground_data	team	3	int(11) unsigned	NO	0	
+character_battleground_data	join_x	4	float	NO	0	
+character_battleground_data	join_y	5	float	NO	0	
+character_battleground_data	join_z	6	float	NO	0	
+character_battleground_data	join_o	7	float	NO	0	
+character_battleground_data	join_map	8	int(11)	NO	0	
+character_db_version	required_z2819_01_characters_item_instance_text_id_fix	1	bit(1)	YES	NULL	
+character_forgotten_skills	guid	1	int(11) unsigned	NO	NULL	PRI
+character_forgotten_skills	skill	2	mediumint(9) unsigned	NO	NULL	PRI
+character_forgotten_skills	value	3	mediumint(9) unsigned	NO	NULL	
+character_gifts	guid	1	int(20) unsigned	NO	0	MUL
+character_gifts	item_guid	2	int(11) unsigned	NO	0	PRI
+character_gifts	entry	3	int(20) unsigned	NO	0	
+character_gifts	flags	4	int(20) unsigned	NO	0	
+character_homebind	guid	1	int(10) unsigned	NO	0	PRI
+character_homebind	map	2	int(10) unsigned	NO	0	
+character_homebind	zone	3	int(10) unsigned	NO	0	
+character_homebind	position_x	4	float	NO	0	
+character_homebind	position_y	5	float	NO	0	
+character_homebind	position_z	6	float	NO	0	
+character_honor_cp	guid	1	int(11) unsigned	NO	0	MUL
+character_honor_cp	victim_type	2	tinyint(3) unsigned	NO	4	
+character_honor_cp	victim	3	int(11) unsigned	NO	0	
+character_honor_cp	honor	4	float	NO	0	
+character_honor_cp	date	5	int(11) unsigned	NO	0	
+character_honor_cp	type	6	tinyint(3) unsigned	NO	0	
+character_instance	guid	1	int(11) unsigned	NO	0	PRI
+character_instance	instance	2	int(11) unsigned	NO	0	PRI
+character_instance	permanent	3	tinyint(1) unsigned	NO	0	
+character_inventory	guid	1	int(10) unsigned	NO	0	MUL
+character_inventory	bag	2	int(10) unsigned	NO	0	
+character_inventory	slot	3	tinyint(3) unsigned	NO	0	
+character_inventory	item	4	int(10) unsigned	NO	0	PRI
+character_inventory	item_template	5	int(10) unsigned	NO	0	
+character_pet	id	1	int(10) unsigned	NO	0	PRI
+character_pet	entry	2	int(10) unsigned	NO	0	
+character_pet	owner	3	int(10) unsigned	NO	0	MUL
+character_pet	modelid	4	int(10) unsigned	YES	0	
+character_pet	CreatedBySpell	5	int(10) unsigned	NO	0	
+character_pet	PetType	6	tinyint(3) unsigned	NO	0	
+character_pet	level	7	int(10) unsigned	NO	1	
+character_pet	exp	8	int(10) unsigned	NO	0	
+character_pet	Reactstate	9	tinyint(3) unsigned	NO	0	
+character_pet	loyaltypoints	10	int(11)	NO	0	
+character_pet	loyalty	11	int(10) unsigned	NO	0	
+character_pet	xpForNextLoyalty	12	int(10) unsigned	NO	0	
+character_pet	trainpoint	13	int(11)	NO	0	
+character_pet	name	14	varchar(100)	YES	'Pet'	
+character_pet	renamed	15	tinyint(3) unsigned	NO	0	
+character_pet	slot	16	int(10) unsigned	NO	0	
+character_pet	curhealth	17	int(10) unsigned	NO	1	
+character_pet	curmana	18	int(10) unsigned	NO	0	
+character_pet	curhappiness	19	int(10) unsigned	NO	0	
+character_pet	savetime	20	bigint(20) unsigned	NO	0	
+character_pet	resettalents_cost	21	int(10) unsigned	NO	0	
+character_pet	resettalents_time	22	bigint(20) unsigned	NO	0	
+character_pet	abdata	23	longtext	YES	NULL	
+character_pet	teachspelldata	24	longtext	YES	NULL	
+character_queststatus	guid	1	int(10) unsigned	NO	0	PRI
+character_queststatus	quest	2	int(10) unsigned	NO	0	PRI
+character_queststatus	status	3	int(10) unsigned	NO	0	
+character_queststatus	rewarded	4	tinyint(3) unsigned	NO	0	
+character_queststatus	explored	5	tinyint(3) unsigned	NO	0	
+character_queststatus	timer	6	bigint(20) unsigned	NO	0	
+character_queststatus	mobcount1	7	int(10) unsigned	NO	0	
+character_queststatus	mobcount2	8	int(10) unsigned	NO	0	
+character_queststatus	mobcount3	9	int(10) unsigned	NO	0	
+character_queststatus	mobcount4	10	int(10) unsigned	NO	0	
+character_queststatus	itemcount1	11	int(10) unsigned	NO	0	
+character_queststatus	itemcount2	12	int(10) unsigned	NO	0	
+character_queststatus	itemcount3	13	int(10) unsigned	NO	0	
+character_queststatus	itemcount4	14	int(10) unsigned	NO	0	
+character_queststatus_weekly	guid	1	int(11) unsigned	NO	0	PRI
+character_queststatus_weekly	quest	2	int(11) unsigned	NO	0	PRI
+character_reputation	guid	1	int(10) unsigned	NO	0	PRI
+character_reputation	faction	2	int(10) unsigned	NO	0	PRI
+character_reputation	standing	3	int(11)	NO	0	
+character_reputation	flags	4	int(11)	NO	0	
+character_skills	guid	1	int(10) unsigned	NO	NULL	PRI
+character_skills	skill	2	mediumint(8) unsigned	NO	NULL	PRI
+character_skills	value	3	mediumint(8) unsigned	NO	NULL	
+character_skills	max	4	mediumint(8) unsigned	NO	NULL	
+character_social	guid	1	int(10) unsigned	NO	0	PRI
+character_social	friend	2	int(10) unsigned	NO	0	PRI
+character_social	flags	3	tinyint(3) unsigned	NO	0	PRI
+character_spell	guid	1	int(10) unsigned	NO	0	PRI
+character_spell	spell	2	int(10) unsigned	NO	0	PRI
+character_spell	active	3	tinyint(3) unsigned	NO	1	
+character_spell	disabled	4	tinyint(3) unsigned	NO	0	
+character_spell_cooldown	guid	1	int(11) unsigned	NO	0	PRI
+character_spell_cooldown	SpellId	2	int(11) unsigned	NO	0	PRI
+character_spell_cooldown	SpellExpireTime	3	bigint(20) unsigned	NO	0	
+character_spell_cooldown	Category	4	int(11) unsigned	NO	0	
+character_spell_cooldown	CategoryExpireTime	5	bigint(20) unsigned	NO	0	
+character_spell_cooldown	ItemId	6	int(11) unsigned	NO	0	
+character_stats	guid	1	int(10) unsigned	NO	0	PRI
+character_stats	maxhealth	2	int(10) unsigned	NO	0	
+character_stats	maxpower1	3	int(10) unsigned	NO	0	
+character_stats	maxpower2	4	int(10) unsigned	NO	0	
+character_stats	maxpower3	5	int(10) unsigned	NO	0	
+character_stats	maxpower4	6	int(10) unsigned	NO	0	
+character_stats	maxpower5	7	int(10) unsigned	NO	0	
+character_stats	maxpower6	8	int(10) unsigned	NO	0	
+character_stats	maxpower7	9	int(10) unsigned	NO	0	
+character_stats	strength	10	int(10) unsigned	NO	0	
+character_stats	agility	11	int(10) unsigned	NO	0	
+character_stats	stamina	12	int(10) unsigned	NO	0	
+character_stats	intellect	13	int(10) unsigned	NO	0	
+character_stats	spirit	14	int(10) unsigned	NO	0	
+character_stats	armor	15	int(10) unsigned	NO	0	
+character_stats	resHoly	16	int(10) unsigned	NO	0	
+character_stats	resFire	17	int(10) unsigned	NO	0	
+character_stats	resNature	18	int(10) unsigned	NO	0	
+character_stats	resFrost	19	int(10) unsigned	NO	0	
+character_stats	resShadow	20	int(10) unsigned	NO	0	
+character_stats	resArcane	21	int(10) unsigned	NO	0	
+character_stats	blockPct	22	float unsigned	NO	0	
+character_stats	dodgePct	23	float unsigned	NO	0	
+character_stats	parryPct	24	float unsigned	NO	0	
+character_stats	critPct	25	float unsigned	NO	0	
+character_stats	rangedCritPct	26	float unsigned	NO	0	
+character_stats	attackPower	27	int(10) unsigned	NO	0	
+character_stats	rangedAttackPower	28	int(10) unsigned	NO	0	
+character_tutorial	account	1	bigint(20) unsigned	NO	NULL	PRI
+character_tutorial	tut0	2	int(10) unsigned	NO	0	
+character_tutorial	tut1	3	int(10) unsigned	NO	0	
+character_tutorial	tut2	4	int(10) unsigned	NO	0	
+character_tutorial	tut3	5	int(10) unsigned	NO	0	
+character_tutorial	tut4	6	int(10) unsigned	NO	0	
+character_tutorial	tut5	7	int(10) unsigned	NO	0	
+character_tutorial	tut6	8	int(10) unsigned	NO	0	
+character_tutorial	tut7	9	int(10) unsigned	NO	0	
+corpse	guid	1	int(11) unsigned	NO	0	PRI
+corpse	player	2	int(11) unsigned	NO	0	MUL
+corpse	position_x	3	float	NO	0	
+corpse	position_y	4	float	NO	0	
+corpse	position_z	5	float	NO	0	
+corpse	orientation	6	float	NO	0	
+corpse	map	7	int(11) unsigned	NO	0	
+corpse	time	8	bigint(20) unsigned	NO	0	MUL
+corpse	corpse_type	9	tinyint(3) unsigned	NO	0	MUL
+corpse	instance	10	int(11) unsigned	NO	0	MUL
+creature_respawn	guid	1	int(10) unsigned	NO	0	PRI
+creature_respawn	respawntime	2	bigint(20) unsigned	NO	0	
+creature_respawn	instance	3	mediumint(8) unsigned	NO	0	PRI
+gameobject_respawn	guid	1	int(10) unsigned	NO	0	PRI
+gameobject_respawn	respawntime	2	bigint(20) unsigned	NO	0	
+gameobject_respawn	instance	3	mediumint(8) unsigned	NO	0	PRI
+game_event_status	event	1	smallint(6) unsigned	NO	0	PRI
+gm_surveys	ticketid	1	int(11) unsigned	NO	NULL	PRI
+gm_surveys	surveyid	2	int(2) unsigned	NO	NULL	
+gm_surveys	answer1	3	tinyint(2) unsigned	YES	NULL	
+gm_surveys	answer2	4	tinyint(2) unsigned	YES	NULL	
+gm_surveys	answer3	5	tinyint(2) unsigned	YES	NULL	
+gm_surveys	answer4	6	tinyint(2) unsigned	YES	NULL	
+gm_surveys	answer5	7	tinyint(2) unsigned	YES	NULL	
+gm_surveys	answer6	8	tinyint(2) unsigned	YES	NULL	
+gm_surveys	answer7	9	tinyint(2) unsigned	YES	NULL	
+gm_surveys	answer8	10	tinyint(2) unsigned	YES	NULL	
+gm_surveys	answer9	11	tinyint(2) unsigned	YES	NULL	
+gm_surveys	answer10	12	tinyint(2) unsigned	YES	NULL	
+gm_surveys	comment	13	text	YES	NULL	
+gm_tickets	id	1	int(11) unsigned	NO	NULL	PRI
+gm_tickets	category	2	tinyint(2) unsigned	NO	0	
+gm_tickets	state	3	tinyint(1) unsigned	NO	0	
+gm_tickets	status	4	tinyint(1) unsigned	NO	0	
+gm_tickets	level	5	tinyint(1) unsigned	NO	0	
+gm_tickets	author_guid	6	int(11) unsigned	NO	NULL	
+gm_tickets	author_name	7	varchar(12)	NO	NULL	
+gm_tickets	locale	8	varchar(4)	NO	'enUS'	
+gm_tickets	mapid	9	int(4) unsigned	NO	0	
+gm_tickets	x	10	float	NO	0	
+gm_tickets	y	11	float	NO	0	
+gm_tickets	z	12	float	NO	0	
+gm_tickets	o	13	float	NO	0	
+gm_tickets	text	14	text	NO	NULL	
+gm_tickets	created	15	bigint(40) unsigned	NO	NULL	
+gm_tickets	updated	16	bigint(40) unsigned	NO	0	
+gm_tickets	seen	17	bigint(40) unsigned	NO	0	
+gm_tickets	answered	18	bigint(40) unsigned	NO	0	
+gm_tickets	closed	19	bigint(40) unsigned	NO	0	
+gm_tickets	assignee_guid	20	int(11) unsigned	NO	0	
+gm_tickets	assignee_name	21	varchar(12)	NO	''	
+gm_tickets	conclusion	22	varchar(255)	NO	''	
+gm_tickets	notes	23	varchar(10000)	NO	''	
+groups	groupId	1	int(11) unsigned	NO	NULL	PRI
+groups	leaderGuid	2	int(11) unsigned	NO	NULL	UNI
+groups	mainTank	3	int(11) unsigned	NO	NULL	
+groups	mainAssistant	4	int(11) unsigned	NO	NULL	
+groups	lootMethod	5	tinyint(4) unsigned	NO	NULL	
+groups	looterGuid	6	int(11) unsigned	NO	NULL	
+groups	lootThreshold	7	tinyint(4) unsigned	NO	NULL	
+groups	icon1	8	int(11) unsigned	NO	NULL	
+groups	icon2	9	int(11) unsigned	NO	NULL	
+groups	icon3	10	int(11) unsigned	NO	NULL	
+groups	icon4	11	int(11) unsigned	NO	NULL	
+groups	icon5	12	int(11) unsigned	NO	NULL	
+groups	icon6	13	int(11) unsigned	NO	NULL	
+groups	icon7	14	int(11) unsigned	NO	NULL	
+groups	icon8	15	int(11) unsigned	NO	NULL	
+groups	isRaid	16	tinyint(1) unsigned	NO	NULL	
+group_instance	leaderGuid	1	int(11) unsigned	NO	0	PRI
+group_instance	instance	2	int(11) unsigned	NO	0	PRI
+group_instance	permanent	3	tinyint(1) unsigned	NO	0	
+group_member	groupId	1	int(11) unsigned	NO	NULL	PRI
+group_member	memberGuid	2	int(11) unsigned	NO	NULL	PRI
+group_member	assistant	3	tinyint(1) unsigned	NO	NULL	
+group_member	subgroup	4	smallint(6) unsigned	NO	NULL	
+guild	guildid	1	int(6) unsigned	NO	0	PRI
+guild	name	2	varchar(255)	NO	''	
+guild	leaderguid	3	int(6) unsigned	NO	0	
+guild	EmblemStyle	4	int(5)	NO	0	
+guild	EmblemColor	5	int(5)	NO	0	
+guild	BorderStyle	6	int(5)	NO	0	
+guild	BorderColor	7	int(5)	NO	0	
+guild	BackgroundColor	8	int(5)	NO	0	
+guild	info	9	varchar(500)	NO	''	
+guild	motd	10	varchar(128)	NO	''	
+guild	createdate	11	bigint(20) unsigned	NO	0	
+guild_eventlog	guildid	1	int(11) unsigned	NO	NULL	PRI
+guild_eventlog	LogGuid	2	int(11) unsigned	NO	NULL	PRI
+guild_eventlog	EventType	3	tinyint(1) unsigned	NO	NULL	
+guild_eventlog	PlayerGuid1	4	int(11) unsigned	NO	NULL	MUL
+guild_eventlog	PlayerGuid2	5	int(11) unsigned	NO	NULL	MUL
+guild_eventlog	NewRank	6	tinyint(2) unsigned	NO	NULL	
+guild_eventlog	TimeStamp	7	bigint(20) unsigned	NO	NULL	
+guild_member	guildid	1	int(6) unsigned	NO	0	MUL
+guild_member	guid	2	int(11) unsigned	NO	0	PRI
+guild_member	rank	3	tinyint(2) unsigned	NO	0	
+guild_member	pnote	4	varchar(31)	NO	''	
+guild_member	offnote	5	varchar(31)	NO	''	
+guild_rank	guildid	1	int(6) unsigned	NO	0	PRI
+guild_rank	rid	2	int(11) unsigned	NO	NULL	PRI
+guild_rank	rname	3	varchar(255)	NO	''	
+guild_rank	rights	4	int(3) unsigned	NO	0	
+instance	id	1	int(11) unsigned	NO	0	PRI
+instance	map	2	int(11) unsigned	NO	0	MUL
+instance	resettime	3	bigint(40) unsigned	NO	0	MUL
+instance	encountersMask	4	int(10) unsigned	NO	0	
+instance	data	5	longtext	YES	NULL	
+instance_reset	mapid	1	int(11) unsigned	NO	0	PRI
+instance_reset	resettime	2	bigint(40) unsigned	NO	0	
+item_instance	guid	1	int(10) unsigned	NO	0	PRI
+item_instance	owner_guid	2	int(10) unsigned	NO	0	MUL
+item_instance	itemEntry	3	mediumint(8) unsigned	NO	0	
+item_instance	creatorGuid	4	int(10) unsigned	NO	0	
+item_instance	giftCreatorGuid	5	int(10) unsigned	NO	0	
+item_instance	count	6	int(10) unsigned	NO	1	
+item_instance	duration	7	int(10) unsigned	NO	0	
+item_instance	charges	8	text	NO	NULL	
+item_instance	flags	9	int(10) unsigned	NO	0	
+item_instance	enchantments	10	text	NO	NULL	
+item_instance	randomPropertyId	11	smallint(6)	NO	0	
+item_instance	durability	12	int(10) unsigned	NO	0	
+item_instance	itemTextId	13	int(10) unsigned	NO	0	
+item_loot	guid	1	int(11) unsigned	NO	0	PRI
+item_loot	owner_guid	2	int(11) unsigned	NO	0	MUL
+item_loot	itemid	3	int(11) unsigned	NO	0	PRI
+item_loot	amount	4	int(11) unsigned	NO	0	
+item_loot	property	5	int(11)	NO	0	
+item_text	id	1	int(11) unsigned	NO	0	PRI
+item_text	text	2	longtext	YES	NULL	
+mail	id	1	int(11) unsigned	NO	0	PRI
+mail	messageType	2	tinyint(3) unsigned	NO	0	
+mail	stationery	3	tinyint(3)	NO	41	
+mail	mailTemplateId	4	mediumint(8) unsigned	NO	0	
+mail	sender	5	int(11) unsigned	NO	0	
+mail	receiver	6	int(11) unsigned	NO	0	MUL
+mail	subject	7	longtext	YES	NULL	
+mail	itemTextId	8	int(11) unsigned	NO	0	
+mail	has_items	9	tinyint(3) unsigned	NO	0	
+mail	expire_time	10	bigint(40) unsigned	NO	0	
+mail	deliver_time	11	bigint(40) unsigned	NO	0	
+mail	money	12	int(11) unsigned	NO	0	
+mail	cod	13	int(11) unsigned	NO	0	
+mail	checked	14	tinyint(3) unsigned	NO	0	
+mail_items	mail_id	1	int(11)	NO	0	PRI
+mail_items	item_guid	2	int(11)	NO	0	PRI
+mail_items	item_template	3	int(11)	NO	0	
+mail_items	receiver	4	int(11) unsigned	NO	0	MUL
+petition	ownerguid	1	int(10) unsigned	NO	NULL	PRI
+petition	petitionguid	2	int(10) unsigned	YES	0	
+petition	name	3	varchar(255)	NO	''	
+petition_sign	ownerguid	1	int(10) unsigned	NO	NULL	MUL
+petition_sign	petitionguid	2	int(11) unsigned	NO	0	PRI
+petition_sign	playerguid	3	int(11) unsigned	NO	0	PRI
+petition_sign	player_account	4	int(11) unsigned	NO	0	
+pet_aura	guid	1	int(11) unsigned	NO	0	PRI
+pet_aura	caster_guid	2	bigint(20) unsigned	NO	0	PRI
+pet_aura	item_guid	3	int(11) unsigned	NO	0	PRI
+pet_aura	spell	4	int(11) unsigned	NO	0	PRI
+pet_aura	stackcount	5	int(11) unsigned	NO	1	
+pet_aura	remaincharges	6	int(11) unsigned	NO	0	
+pet_aura	basepoints0	7	int(11)	NO	0	
+pet_aura	basepoints1	8	int(11)	NO	0	
+pet_aura	basepoints2	9	int(11)	NO	0	
+pet_aura	periodictime0	10	int(11) unsigned	NO	0	
+pet_aura	periodictime1	11	int(11) unsigned	NO	0	
+pet_aura	periodictime2	12	int(11) unsigned	NO	0	
+pet_aura	maxduration	13	int(11)	NO	0	
+pet_aura	remaintime	14	int(11)	NO	0	
+pet_aura	effIndexMask	15	int(11) unsigned	NO	0	
+pet_spell	guid	1	int(10) unsigned	NO	0	PRI
+pet_spell	spell	2	int(10) unsigned	NO	0	PRI
+pet_spell	active	3	int(10) unsigned	NO	0	
+pet_spell_cooldown	guid	1	int(11) unsigned	NO	0	PRI
+pet_spell_cooldown	spell	2	int(11) unsigned	NO	0	PRI
+pet_spell_cooldown	time	3	bigint(20) unsigned	NO	0	
+playerbot_saved_data	guid	1	int(11) unsigned	NO	0	PRI
+playerbot_saved_data	combat_order	2	tinyint(3) unsigned	NO	0	
+playerbot_saved_data	primary_target	3	int(11) unsigned	NO	0	
+playerbot_saved_data	secondary_target	4	int(11) unsigned	NO	0	
+playerbot_saved_data	pname	5	varchar(12)	NO	''	
+playerbot_saved_data	sname	6	varchar(12)	NO	''	
+playerbot_saved_data	combat_delay	7	int(11) unsigned	NO	0	
+pvpstats_battlegrounds	id	1	bigint(20) unsigned	NO	NULL	PRI
+pvpstats_battlegrounds	winner_team	2	tinyint(3)	NO	NULL	
+pvpstats_battlegrounds	bracket_id	3	tinyint(3) unsigned	NO	NULL	
+pvpstats_battlegrounds	type	4	tinyint(3) unsigned	NO	NULL	
+pvpstats_battlegrounds	date	5	datetime	NO	NULL	
+pvpstats_players	battleground_id	1	bigint(20) unsigned	NO	NULL	PRI
+pvpstats_players	character_guid	2	int(10) unsigned	NO	NULL	PRI
+pvpstats_players	score_killing_blows	3	mediumint(8) unsigned	NO	NULL	
+pvpstats_players	score_deaths	4	mediumint(8) unsigned	NO	NULL	
+pvpstats_players	score_honorable_kills	5	mediumint(8) unsigned	NO	NULL	
+pvpstats_players	score_bonus_honor	6	mediumint(8) unsigned	NO	NULL	
+pvpstats_players	score_damage_done	7	mediumint(8) unsigned	NO	NULL	
+pvpstats_players	score_healing_done	8	mediumint(8) unsigned	NO	NULL	
+pvpstats_players	attr_1	9	mediumint(8) unsigned	NO	0	
+pvpstats_players	attr_2	10	mediumint(8) unsigned	NO	0	
+pvpstats_players	attr_3	11	mediumint(8) unsigned	NO	0	
+pvpstats_players	attr_4	12	mediumint(8) unsigned	NO	0	
+pvpstats_players	attr_5	13	mediumint(8) unsigned	NO	0	
+saved_variables	NextWeeklyQuestResetTime	1	bigint(40) unsigned	NO	0	
+saved_variables	NextMaintenanceDate	2	int(11) unsigned	NO	0	
+saved_variables	cleaning_flags	3	int(11) unsigned	NO	0	
+world	map	1	int(11) unsigned	NO	0	PRI
+world	data	2	longtext	YES	NULL	
+world_state	Id	1	int(11) unsigned	NO	NULL	PRI
+world_state	Data	2	longtext	YES	NULL	
