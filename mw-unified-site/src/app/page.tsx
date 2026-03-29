@@ -1,6 +1,6 @@
 import Navbar from "../components/Navbar";
 import Hero from "../components/Hero";
-import ServerCard from "../components/ServerCard";
+import ServerCards from "../components/ServerCards";
 import NewsFeed from "../components/NewsFeed";
 import Footer from "../components/Footer";
 import VerifyToast from "../components/VerifyToast";
@@ -24,40 +24,7 @@ export default function Home() {
             One account works across all servers. Login once, play everywhere.
           </p>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <ServerCard
-              name="Classic Realm"
-              expansion="classic"
-              description="Relive the original World of Warcraft experience. Explore Azeroth, conquer Molten Core, and face Onyxia."
-              patchVersion="1.12.1"
-              emulator="VMaNGOS"
-              serverIp="wow.morgan-dev.com"
-              isOnline={true}
-              playersOnline={0}
-            />
-
-            <ServerCard
-              name="TBC Realm"
-              expansion="tbc"
-              description="Step through the Dark Portal into Outland. Raid Karazhan, battle Illidan, and soar through Nagrand."
-              patchVersion="2.4.3"
-              emulator="CMaNGOS"
-              serverIp="wow.morgan-dev.com"
-              isOnline={true}
-              playersOnline={0}
-            />
-
-            <ServerCard
-              name="WotLK Realm"
-              expansion="wotlk"
-              description="Journey to Northrend and confront the Lich King. Storm Icecrown Citadel and claim your destiny."
-              patchVersion="3.3.5a"
-              emulator="AzerothCore"
-              serverIp="wow.morgan-dev.com"
-              isOnline={true}
-              playersOnline={0}
-            />
-          </div>
+          <ServerCards />
         </div>
       </section>
 

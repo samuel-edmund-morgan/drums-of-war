@@ -417,6 +417,39 @@ if [[ -n "$ACCOUNT" ]]; then
 
     db_exec "$TGT_DB_CTR" -e "UPDATE ${TGT_CHAR_DB}.characters SET online=0 WHERE account=${ACCOUNT_ID}"
 
+    # Force reset talents on next login
+    # AT_LOGIN_RESET_TALENTS=0x04
+    log_info "Setting at_login flags: reset talents"
+    db_exec "$TGT_DB_CTR" -e "UPDATE ${TGT_CHAR_DB}.characters SET at_login = at_login | 4 WHERE guid IN (${GUID_LIST})"
+
+    # Ensure class skills exist in character_skills (fixes spellbook tab placement).
+    # Without these, client puts class spells into General tab.
+    # Class skill IDs: Warrior(26,256,257), Paladin(594,267,184), Hunter(50,163,51),
+    # Rogue(253,38,39), Priest(613,56,78), DK(770,771,772), Shaman(373,374,375),
+    # Mage(237,8,6), Warlock(40,41,42), Druid(574,134,573)
+    log_info "Ensuring class skills in character_skills..."
+    for GUID in $(echo "$GUID_LIST" | tr ',' ' '); do
+        CLASS_ID=$(db_exec "$TGT_DB_CTR" -N -e "SELECT class FROM ${TGT_CHAR_DB}.characters WHERE guid=${GUID}")
+        SKILLS=""
+        case "$CLASS_ID" in
+            1) SKILLS="26,256,257" ;;   # Warrior
+            2) SKILLS="594,267,184" ;;  # Paladin
+            3) SKILLS="50,163,51" ;;    # Hunter
+            4) SKILLS="253,38,39" ;;    # Rogue
+            5) SKILLS="613,56,78" ;;    # Priest
+            6) SKILLS="770,771,772" ;;  # Death Knight
+            7) SKILLS="373,374,375" ;;  # Shaman
+            8) SKILLS="237,8,6" ;;      # Mage
+            9) SKILLS="40,41,42" ;;     # Warlock
+            11) SKILLS="574,134,573" ;; # Druid
+        esac
+        if [[ -n "$SKILLS" ]]; then
+            for SKILL in $(echo "$SKILLS" | tr ',' ' '); do
+                db_exec "$TGT_DB_CTR" -e "INSERT IGNORE INTO ${TGT_CHAR_DB}.character_skills (guid, skill, value, max) VALUES (${GUID}, ${SKILL}, 1, 1)" 2>/dev/null || true
+            done
+        fi
+    done
+
     # Remove talent spells from character_spell — talents reset on transfer,
     # but CMaNGOS doesn't clean spell entries. Match against armory DBC data.
     ARMORY_DB=""

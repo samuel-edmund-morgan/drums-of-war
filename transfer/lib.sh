@@ -141,10 +141,6 @@ db_exec() {
 
   if [[ "$ctr" == "${LIB_DB_CONTAINER["azerothcore"]}" ]]; then
     client="mysql"
-    password="${AZEROTHCORE_DB_PASSWORD}"
-  elif [[ "$ctr" == "${LIB_DB_CONTAINER["classic"]}" ]]; then
-    user="${VMANGOS_DB_USER}"
-    password="${VMANGOS_DB_PASSWORD}"
   fi
 
   docker exec "$ctr" "$client" -u "${user}" -p"${password}" "$@" 2>/dev/null
@@ -158,10 +154,6 @@ db_dump() {
 
   if [[ "$ctr" == "${LIB_DB_CONTAINER["azerothcore"]}" ]]; then
     client="mysqldump"
-    password="${AZEROTHCORE_DB_PASSWORD}"
-  elif [[ "$ctr" == "${LIB_DB_CONTAINER["classic"]}" ]]; then
-    user="${VMANGOS_DB_USER}"
-    password="${VMANGOS_DB_PASSWORD}"
   fi
 
   docker exec "$ctr" "$client" -u "${user}" -p"${password}" "$@" 2>/dev/null
