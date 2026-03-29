@@ -50,27 +50,22 @@ nano .env    # Set your domain, IP, and API keys
 
 ```
 drums-of-war/
-├── setup.sh                     # Initial setup script
-├── update.sh                    # Update and rebuild script
-├── .env.example                 # Environment template
-├── docs/                        # Project documentation
-│   ├── BACKLOG.md               # Task queue
-│   ├── ARCHITECTURE.md          # System design
-│   └── ...
-├── data/                        # Game data (maps, not in git)
-│   ├── classic/
-│   ├── tbc/
-│   └── wotlk/
-└── localProjects/cmangos_projects/
-    ├── mw-unified-site/         # Next.js website
-    ├── mw-auth-service/         # PHP auth backend
-    ├── wow-auth-proxy/          # Auth proxy
-    ├── vmangos-classic/         # Classic Docker stack
-    ├── docker-tbc/              # TBC Docker stack
-    ├── docker-azerothcore/      # WotLK Docker stack
-    ├── transfer/                # Character transfer pipeline
-    ├── mangos-classic/          # VMaNGOS upstream (cloned by setup.sh)
-    └── azerothcore-wotlk/       # AzerothCore upstream (cloned by setup.sh)
+├── setup.sh                 # Initial setup script
+├── update.sh                # Update and rebuild script
+├── .env.example             # Environment template
+├── mw-unified-site/         # Next.js website
+├── mw-auth-service/         # PHP auth backend
+├── wow-auth-proxy/          # Auth proxy
+├── vmangos-classic/         # Classic Docker stack
+├── docker-tbc/              # TBC Docker stack
+├── docker-azerothcore/      # WotLK Docker stack
+├── transfer/                # Character transfer pipeline
+├── mangos-classic/          # VMaNGOS upstream (cloned by setup.sh)
+├── azerothcore-wotlk/       # AzerothCore upstream (cloned by setup.sh)
+└── data/                    # Game data — maps/vmaps/mmaps (not in git)
+    ├── classic/
+    ├── tbc/
+    └── wotlk/
 ```
 
 ## Configuration

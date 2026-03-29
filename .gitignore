@@ -7,23 +7,24 @@
 workflow_config.md
 remote_access.md
 
-# ── Upstream repos (cloned by setup.sh) ──
-localProjects/cmangos_projects/azerothcore-wotlk/
-localProjects/cmangos_projects/mangos-classic/
-localProjects/cmangos_projects/issues.wiki/
-localProjects/cmangos_projects/spp-classics-cmangos/
+# ── Internal dev docs (not for public repo) ──
+docs/
+AGENTS.md
+CLAUDE.md
 
-# ── Legacy / replaced ──
-localProjects/cmangos_projects/mangos-website/
-localProjects/cmangos_projects/docker-website/
+# ── Upstream repos (cloned by setup.sh) ──
+mangos-classic/
+mangos-tbc/
+azerothcore-wotlk/
+
+# ── Legacy / unused ──
+additionalContextFiles/
+localProjects/
 
 # ── Data files (maps, DBC, backups) ──
 *.sql
 *.dbc
-data/classic/
-data/tbc/
-data/wotlk/
-additionalContextFiles/
+data/
 
 # ── Build artifacts ──
 node_modules/
