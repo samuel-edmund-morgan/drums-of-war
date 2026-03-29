@@ -84,13 +84,22 @@ export const REP_STANDINGS = [
   { name: "Friendly", min: 3000, max: 8999, color: "#00cc00" },
   { name: "Honored", min: 9000, max: 20999, color: "#00cc00" },
   { name: "Revered", min: 21000, max: 41999, color: "#00cc00" },
-  { name: "Exalted", min: 42000, max: 999999, color: "#00ccff" },
+  { name: "Exalted", min: 42000, max: 42999, color: "#00ccff" },
 ];
 
 export function getStanding(value: number) {
+  // Values above Exalted cap (42999) are still Exalted at 100%
+  if (value > 42999) {
+    const s = REP_STANDINGS[REP_STANDINGS.length - 1]; // Exalted
+    return { ...s, progress: 999, range: 1000, percent: 100 };
+  }
+  // Values below Hated floor are Hated at 0%
+  if (value < -42000) {
+    const s = REP_STANDINGS[0]; // Hated
+    return { ...s, progress: 0, range: s.max - s.min + 1, percent: 0 };
+  }
   for (const s of REP_STANDINGS) {
     if (value >= s.min && value <= s.max) {
-      // Progress within this standing
       const range = s.max - s.min + 1;
       const progress = value - s.min;
       return { ...s, progress, range, percent: Math.min(100, (progress / range) * 100) };
