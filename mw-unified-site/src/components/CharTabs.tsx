@@ -153,7 +153,7 @@ function ReputationTab({ char }: { char: CharProfile }) {
                   <div key={rep.name}>
                     <div className="flex justify-between text-sm mb-1">
                       <span className="text-[#e8e6e3]">{rep.name}</span>
-                      <span style={{ color: s.color }}>{s.name} ({rep.standing.toLocaleString()})</span>
+                      <span style={{ color: s.color }}>{s.name} ({Math.min(rep.standing, 42999).toLocaleString()})</span>
                     </div>
                     <div className="h-1.5 bg-[#2a2a32] rounded-full overflow-hidden">
                       <div className="h-full rounded-full" style={{ width: `${s.percent}%`, backgroundColor: s.color }} />
