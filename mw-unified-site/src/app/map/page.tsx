@@ -180,14 +180,15 @@ export default function MapPage() {
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             {/* Map */}
             <div className="lg:col-span-3">
-              <div className="relative border border-[#2a2a32] rounded-xl overflow-hidden bg-[#1a1510]">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={mapConfig.image}
-                  alt={mapConfig.name}
-                  className="w-full h-auto block"
-                  draggable={false}
-                />
+              <div
+                className="relative border border-[#2a2a32] rounded-xl overflow-hidden"
+                style={{
+                  backgroundImage: `url(${mapConfig.image})`,
+                  backgroundSize: "cover",
+                  backgroundPosition: "center",
+                  aspectRatio: "4/3",
+                }}
+              >
 
                 {/* Player count overlay */}
                 <div className="absolute top-3 right-3 px-3 py-1.5 rounded-lg bg-black/70 text-[#ffa500] text-sm font-bold backdrop-blur-sm">
