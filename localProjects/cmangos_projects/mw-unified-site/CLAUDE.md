@@ -7,7 +7,7 @@ After every deployed change that affects the website UI or functionality, you MU
 1. Open the site at `https://world-of-warcraft.morgan-dev.com`
 2. Log in with the appropriate account:
    - **User-facing changes**: `samuel` / `samuel`
-   - **Admin-facing changes**: `admin` / `nadvap-pevbun-Fupty0`
+   - **Admin-facing changes**: login as admin account (credentials in .env or workflow_config.md)
 3. Navigate to the affected page/feature
 4. Test the specific buttons, forms, or UI elements that were changed
 5. Take a screenshot as proof if visual changes were made
