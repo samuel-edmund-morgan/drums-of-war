@@ -28,14 +28,52 @@ const PATCH_CONFIG: Record<string, { label: string; badge: string }> = {
   wotlk: { label: "WotLK", badge: "bg-blue-800/80 text-blue-200" },
 };
 
-// Map configs for coordinate → pixel conversion
-// From WorldMapArea DBC (AreaID=0, continent-wide bounds)
-const MAP_BOUNDS: Record<number, { name: string; locLeft: number; locRight: number; locTop: number; locBottom: number }> = {
-  0: { name: "Eastern Kingdoms", locLeft: 16000, locRight: -19199.9, locTop: 7466.6, locBottom: -16000 },
-  1: { name: "Kalimdor", locLeft: 17066.6, locRight: -19733.21, locTop: 12799.9, locBottom: -11733.3 },
-  530: { name: "Outland", locLeft: 11000, locRight: -6000, locTop: 9000, locBottom: -5000 },
-  571: { name: "Northrend", locLeft: 12000, locRight: -6000, locTop: 10000, locBottom: -4000 },
-};
+// Map image configs: coordinate conversion from AzerothCore/playermap
+// Image size: 966 x 732 px
+const IMG_W = 966;
+const IMG_H = 732;
+
+interface MapConfig {
+  name: string;
+  image: string;
+  // Conversion: game coords → pixel coords on the 966x732 image
+  // pixel_x = offsetX - Math.round(game_y * scale)
+  // pixel_y = offsetY - Math.round(game_x * scale)
+  scale: number;
+  offsetX: number;
+  offsetY: number;
+  maps: number[]; // which WoW map IDs belong here
+}
+
+const MAP_CONFIGS: MapConfig[] = [
+  {
+    name: "Azeroth",
+    image: "/map-images/azeroth.jpg",
+    scale: 0.025140,
+    offsetX: 752, // for map 0 (Eastern Kingdoms)
+    offsetY: 291,
+    maps: [0, 1], // EK + Kalimdor on same image
+  },
+  {
+    name: "Outland",
+    image: "/map-images/outland.jpg",
+    scale: 0.051446,
+    offsetX: 858,
+    offsetY: 84,
+    maps: [530],
+  },
+  {
+    name: "Northrend",
+    image: "/map-images/northrend.jpg",
+    scale: 0.050085,
+    offsetX: 505,
+    offsetY: 642,
+    maps: [571],
+  },
+];
+
+// Special offsets for Kalimdor (map 1) on azeroth.jpg
+const KALIMDOR_OFFSET = { x: 194, y: 398 };
 
 interface Player {
   name: string;
@@ -51,19 +89,31 @@ interface Player {
   patch: string;
 }
 
-function gameToPercent(gameX: number, gameY: number, mapId: number): { px: number; py: number } | null {
-  const bounds = MAP_BOUNDS[mapId];
-  if (!bounds) return null;
-  const px = ((bounds.locLeft - gameY) / (bounds.locLeft - bounds.locRight)) * 100;
-  const py = ((bounds.locTop - gameX) / (bounds.locTop - bounds.locBottom)) * 100;
-  return { px: Math.max(0, Math.min(100, px)), py: Math.max(0, Math.min(100, py)) };
+function gameToPixel(gameX: number, gameY: number, mapId: number, config: MapConfig): { px: number; py: number } | null {
+  let offsetX = config.offsetX;
+  let offsetY = config.offsetY;
+
+  // Kalimdor has different offsets on the azeroth.jpg image
+  if (mapId === 1) {
+    offsetX = KALIMDOR_OFFSET.x;
+    offsetY = KALIMDOR_OFFSET.y;
+  }
+
+  const px = offsetX - Math.round(gameY * config.scale);
+  const py = offsetY - Math.round(gameX * config.scale);
+
+  // Convert to percentage for responsive rendering
+  return {
+    px: (px / IMG_W) * 100,
+    py: (py / IMG_H) * 100,
+  };
 }
 
 export default function MapPage() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedPatch, setSelectedPatch] = useState<string>("all");
-  const [selectedMap, setSelectedMap] = useState<number>(0);
+  const [selectedMapIdx, setSelectedMapIdx] = useState(0);
   const [hoveredPlayer, setHoveredPlayer] = useState<Player | null>(null);
 
   const fetchPlayers = useCallback(async () => {
@@ -83,9 +133,8 @@ export default function MapPage() {
     return () => clearInterval(interval);
   }, [fetchPlayers]);
 
-  const filteredPlayers = players.filter((p) => p.map === selectedMap);
-  const mapConfig = MAP_BOUNDS[selectedMap];
-  const availableMaps = [...new Set(players.map((p) => p.map))].filter((m) => MAP_BOUNDS[m]);
+  const mapConfig = MAP_CONFIGS[selectedMapIdx];
+  const filteredPlayers = players.filter((p) => mapConfig.maps.includes(p.map));
 
   // Zone breakdown
   const zoneGroups: Record<string, Player[]> = {};
@@ -113,7 +162,6 @@ export default function MapPage() {
 
           {/* Filters */}
           <div className="flex flex-wrap gap-3 mb-6">
-            {/* Server filter */}
             <div className="flex gap-1 bg-[#141418] border border-[#2a2a32] rounded-lg p-1">
               <button
                 onClick={() => setSelectedPatch("all")}
@@ -124,9 +172,7 @@ export default function MapPage() {
                 All Servers
               </button>
               {(["classic", "tbc", "wotlk"] as const).map((p) => (
-                <button
-                  key={p}
-                  onClick={() => setSelectedPatch(p)}
+                <button key={p} onClick={() => setSelectedPatch(p)}
                   className={`px-3 py-1.5 text-xs rounded-md font-semibold transition-all ${
                     selectedPatch === p ? "bg-[#ff6b00]/20 border border-[#ff6b00] text-[#ffa500]" : "text-[#666] hover:text-[#9a9a9a]"
                   }`}
@@ -136,14 +182,11 @@ export default function MapPage() {
               ))}
             </div>
 
-            {/* Map filter */}
             <div className="flex gap-1 bg-[#141418] border border-[#2a2a32] rounded-lg p-1">
-              {Object.entries(MAP_BOUNDS).map(([id, cfg]) => (
-                <button
-                  key={id}
-                  onClick={() => setSelectedMap(Number(id))}
+              {MAP_CONFIGS.map((cfg, idx) => (
+                <button key={cfg.name} onClick={() => setSelectedMapIdx(idx)}
                   className={`px-3 py-1.5 text-xs rounded-md font-semibold transition-all ${
-                    selectedMap === Number(id) ? "bg-[#333] text-white" : "text-[#666] hover:text-[#9a9a9a]"
+                    selectedMapIdx === idx ? "bg-[#333] text-white" : "text-[#666] hover:text-[#9a9a9a]"
                   }`}
                 >
                   {cfg.name}
@@ -152,41 +195,33 @@ export default function MapPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Map canvas */}
-            <div className="lg:col-span-2">
-              <div
-                className="relative bg-[#0e0e12] border border-[#2a2a32] rounded-xl overflow-hidden"
-                style={{ aspectRatio: "4/3" }}
-              >
-                {/* Grid overlay */}
-                <div className="absolute inset-0 opacity-10"
-                  style={{
-                    backgroundImage: "linear-gradient(#333 1px, transparent 1px), linear-gradient(90deg, #333 1px, transparent 1px)",
-                    backgroundSize: "10% 10%",
-                  }}
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            {/* Map */}
+            <div className="lg:col-span-3">
+              <div className="relative bg-[#0e0e12] border border-[#2a2a32] rounded-xl overflow-hidden">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={mapConfig.image}
+                  alt={mapConfig.name}
+                  className="w-full h-auto block"
+                  draggable={false}
                 />
 
-                {/* Map name */}
-                <div className="absolute top-4 left-4 text-[#666] text-xs font-semibold uppercase tracking-wider">
-                  {mapConfig?.name || "Unknown"}
-                </div>
-
-                {/* Player count */}
-                <div className="absolute top-4 right-4 text-[#ffa500] text-sm font-bold">
+                {/* Player count overlay */}
+                <div className="absolute top-3 right-3 px-3 py-1.5 rounded-lg bg-black/70 text-[#ffa500] text-sm font-bold backdrop-blur-sm">
                   {filteredPlayers.length} player{filteredPlayers.length !== 1 ? "s" : ""}
                 </div>
 
                 {/* Player dots */}
                 {filteredPlayers.map((p, i) => {
-                  const pos = gameToPercent(p.x, p.y, p.map);
-                  if (!pos) return null;
+                  const pos = gameToPixel(p.x, p.y, p.map, mapConfig);
+                  if (!pos || pos.px < 0 || pos.px > 100 || pos.py < 0 || pos.py > 100) return null;
                   const faction = FACTION_BY_RACE[p.race];
                   const isHovered = hoveredPlayer === p;
                   return (
                     <div
                       key={`${p.patch}-${p.name}-${i}`}
-                      className="absolute transition-all duration-300"
+                      className="absolute transition-all duration-200"
                       style={{
                         left: `${pos.px}%`,
                         top: `${pos.py}%`,
@@ -196,27 +231,18 @@ export default function MapPage() {
                       onMouseEnter={() => setHoveredPlayer(p)}
                       onMouseLeave={() => setHoveredPlayer(null)}
                     >
-                      {/* Dot */}
                       <div
-                        className={`rounded-full border-2 cursor-pointer transition-all ${
-                          isHovered ? "w-5 h-5" : "w-3 h-3"
-                        }`}
+                        className={`rounded-full border-2 cursor-pointer transition-all ${isHovered ? "w-5 h-5" : "w-3 h-3"}`}
                         style={{
                           backgroundColor: CLASS_COLORS[p.classId] || "#ccc",
                           borderColor: faction === "alliance" ? "#3b82f6" : "#ef4444",
                           boxShadow: `0 0 ${isHovered ? "12" : "6"}px ${CLASS_COLORS[p.classId] || "#ccc"}80`,
                         }}
                       />
-
-                      {/* Tooltip */}
                       {isHovered && (
                         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-[#141418] border border-[#2a2a32] rounded-lg px-3 py-2 whitespace-nowrap shadow-xl z-50">
-                          <div className="font-bold text-sm" style={{ color: CLASS_COLORS[p.classId] }}>
-                            {p.name}
-                          </div>
-                          <div className="text-xs text-[#9a9a9a]">
-                            Level {p.level} {CLASS_NAMES[p.classId]}
-                          </div>
+                          <div className="font-bold text-sm" style={{ color: CLASS_COLORS[p.classId] }}>{p.name}</div>
+                          <div className="text-xs text-[#9a9a9a]">Level {p.level} {CLASS_NAMES[p.classId]}</div>
                           <div className="text-xs text-[#666]">{p.zoneName}</div>
                           <span className={`inline-block mt-1 px-1.5 py-0.5 rounded text-[10px] font-bold ${PATCH_CONFIG[p.patch]?.badge || ""}`}>
                             {PATCH_CONFIG[p.patch]?.label}
@@ -227,34 +253,25 @@ export default function MapPage() {
                   );
                 })}
 
-                {/* Empty state */}
+                {/* Empty state overlay */}
                 {!loading && filteredPlayers.length === 0 && (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="text-center">
-                      <p className="text-[#666] text-lg mb-1">No players online</p>
-                      <p className="text-[#444] text-sm">on {mapConfig?.name}</p>
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                    <div className="text-center px-4 py-3 rounded-lg bg-black/60 backdrop-blur-sm">
+                      <p className="text-[#9a9a9a] text-sm">No players online on {mapConfig.name}</p>
                     </div>
-                  </div>
-                )}
-
-                {loading && (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="text-[#666]">Loading...</div>
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Zone breakdown sidebar */}
+            {/* Sidebar */}
             <div className="space-y-4">
               <div className="bg-[#141418] border border-[#2a2a32] rounded-xl p-4">
-                <h3 className="text-sm font-bold text-[#e8e6e3] mb-3 uppercase tracking-wider">
-                  Players by Zone
-                </h3>
+                <h3 className="text-sm font-bold text-[#e8e6e3] mb-3 uppercase tracking-wider">Players by Zone</h3>
                 {Object.keys(zoneGroups).length === 0 ? (
                   <p className="text-[#666] text-sm">No players online</p>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-3 max-h-60 overflow-y-auto">
                     {Object.entries(zoneGroups)
                       .sort((a, b) => b[1].length - a[1].length)
                       .map(([zone, zonePlayers]) => (
@@ -265,8 +282,7 @@ export default function MapPage() {
                           </div>
                           <div className="flex flex-wrap gap-1">
                             {zonePlayers.map((p, i) => (
-                              <span
-                                key={i}
+                              <span key={i}
                                 className="text-xs px-2 py-0.5 rounded-full cursor-pointer hover:opacity-80 transition-opacity"
                                 style={{
                                   backgroundColor: `${CLASS_COLORS[p.classId]}20`,
@@ -286,23 +302,15 @@ export default function MapPage() {
                 )}
               </div>
 
-              {/* Total counts */}
               <div className="bg-[#141418] border border-[#2a2a32] rounded-xl p-4">
-                <h3 className="text-sm font-bold text-[#e8e6e3] mb-3 uppercase tracking-wider">
-                  Total Online
-                </h3>
+                <h3 className="text-sm font-bold text-[#e8e6e3] mb-3 uppercase tracking-wider">Total Online</h3>
                 <div className="space-y-2 text-sm">
-                  {(["classic", "tbc", "wotlk"] as const).map((p) => {
-                    const count = players.filter((pl) => pl.patch === p).length;
-                    return (
-                      <div key={p} className="flex justify-between">
-                        <span className={`px-2 py-0.5 rounded text-xs font-semibold ${PATCH_CONFIG[p].badge}`}>
-                          {PATCH_CONFIG[p].label}
-                        </span>
-                        <span className="text-[#e8e6e3] font-bold">{count}</span>
-                      </div>
-                    );
-                  })}
+                  {(["classic", "tbc", "wotlk"] as const).map((p) => (
+                    <div key={p} className="flex justify-between">
+                      <span className={`px-2 py-0.5 rounded text-xs font-semibold ${PATCH_CONFIG[p].badge}`}>{PATCH_CONFIG[p].label}</span>
+                      <span className="text-[#e8e6e3] font-bold">{players.filter((pl) => pl.patch === p).length}</span>
+                    </div>
+                  ))}
                   <div className="flex justify-between pt-2 border-t border-[#2a2a32]">
                     <span className="text-[#9a9a9a] font-semibold">Total</span>
                     <span className="text-[#ffa500] font-bold">{players.length}</span>
