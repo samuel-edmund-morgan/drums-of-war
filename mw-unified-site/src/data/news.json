@@ -1,5 +1,14 @@
 [
   {
+    "id": 22,
+    "title": "Player Map: live positions on the world map",
+    "author": "Drums of War Team",
+    "date": "2026-03-29T10:00:00Z",
+    "preview": "New interactive Player Map shows online players positioned on the world map with class colors, faction borders, zone breakdown, and auto-refresh every 15 seconds.",
+    "patch": "general",
+    "tag": "feature"
+  },
+  {
     "id": 21,
     "title": "Admin Panel: Server logs, Docker management & config tools",
     "author": "Drums of War Team",

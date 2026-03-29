@@ -8,6 +8,7 @@ const WORLD_LINKS = [
   { href: "/online",  label: "Players Online" },
   { href: "/honor",   label: "Honor" },
   { href: "/auction", label: "Auction House" },
+  { href: "/map",     label: "Player Map" },
 ];
 
 const CLASS_COLORS: Record<number, string> = {
