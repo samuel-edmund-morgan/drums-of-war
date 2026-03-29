@@ -76,6 +76,7 @@ const MAP_CONFIGS: MapConfig[] = [
 const KALIMDOR_OFFSET = { x: 194, y: 398 };
 
 interface Player {
+  guid: number;
   name: string;
   race: number;
   classId: number;
@@ -198,7 +199,13 @@ export default function MapPage() {
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             {/* Map */}
             <div className="lg:col-span-3">
-              <div className="relative bg-[#0e0e12] border border-[#2a2a32] rounded-xl overflow-hidden">
+              <div
+                className="relative border border-[#2a2a32] rounded-xl overflow-hidden"
+                style={{
+                  backgroundColor: mapConfig.maps.includes(530) ? "#0a0a0c" : "#0a1929",
+                  backgroundImage: mapConfig.maps.includes(530) ? "none" : "radial-gradient(ellipse at center, #0d2847 0%, #071422 60%, #050e18 100%)",
+                }}
+              >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={mapConfig.image}
@@ -231,22 +238,27 @@ export default function MapPage() {
                       onMouseEnter={() => setHoveredPlayer(p)}
                       onMouseLeave={() => setHoveredPlayer(null)}
                     >
-                      <div
-                        className={`rounded-full border-2 cursor-pointer transition-all ${isHovered ? "w-5 h-5" : "w-3 h-3"}`}
+                      <a
+                        href={`/armory/character/${p.patch}/${p.guid}`}
+                        className={`block rounded-full border-2 cursor-pointer transition-all ${isHovered ? "w-5 h-5" : "w-3 h-3"}`}
                         style={{
                           backgroundColor: CLASS_COLORS[p.classId] || "#ccc",
                           borderColor: faction === "alliance" ? "#3b82f6" : "#ef4444",
                           boxShadow: `0 0 ${isHovered ? "12" : "6"}px ${CLASS_COLORS[p.classId] || "#ccc"}80`,
                         }}
+                        title={`${p.name} — Level ${p.level} ${CLASS_NAMES[p.classId]} — ${p.zoneName}`}
                       />
                       {isHovered && (
-                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-[#141418] border border-[#2a2a32] rounded-lg px-3 py-2 whitespace-nowrap shadow-xl z-50">
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 bg-[#141418] border border-[#2a2a32] rounded-lg px-3 py-2 whitespace-nowrap shadow-xl z-50 pointer-events-none">
                           <div className="font-bold text-sm" style={{ color: CLASS_COLORS[p.classId] }}>{p.name}</div>
                           <div className="text-xs text-[#9a9a9a]">Level {p.level} {CLASS_NAMES[p.classId]}</div>
                           <div className="text-xs text-[#666]">{p.zoneName}</div>
-                          <span className={`inline-block mt-1 px-1.5 py-0.5 rounded text-[10px] font-bold ${PATCH_CONFIG[p.patch]?.badge || ""}`}>
-                            {PATCH_CONFIG[p.patch]?.label}
-                          </span>
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${PATCH_CONFIG[p.patch]?.badge || ""}`}>
+                              {PATCH_CONFIG[p.patch]?.label}
+                            </span>
+                            <span className="text-[10px] text-[#ffa500]">Click to view armory</span>
+                          </div>
                         </div>
                       )}
                     </div>

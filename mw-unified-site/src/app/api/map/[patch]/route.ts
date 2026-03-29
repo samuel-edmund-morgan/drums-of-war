@@ -68,6 +68,7 @@ export async function GET(
   }
 
   const players: Array<{
+    guid: number;
     name: string;
     race: number;
     classId: number;
@@ -92,6 +93,7 @@ export async function GET(
         );
         for (const r of rows) {
           players.push({
+            guid: r.guid,
             name: r.name,
             race: r.race,
             classId: r.class,

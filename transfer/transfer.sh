@@ -417,6 +417,22 @@ if [[ -n "$ACCOUNT" ]]; then
 
     db_exec "$TGT_DB_CTR" -e "UPDATE ${TGT_CHAR_DB}.characters SET online=0 WHERE account=${ACCOUNT_ID}"
 
+    # Remove talent spells from character_spell — talents reset on transfer,
+    # but CMaNGOS doesn't clean spell entries. Match against armory DBC data.
+    ARMORY_DB=""
+    case "$TARGET" in
+        tbc)   ARMORY_DB="tbcarmory" ;;
+        wotlk) ARMORY_DB="wotlkarmory" ;;
+    esac
+    if [[ -n "$ARMORY_DB" ]]; then
+        log_info "Cleaning talent spells from character_spell (talents reset on transfer)..."
+        db_exec "$TGT_DB_CTR" -e "
+            DELETE cs FROM ${TGT_CHAR_DB}.character_spell cs
+            JOIN ${ARMORY_DB}.dbc_talent t
+              ON cs.spell IN (t.rank1, t.rank2, t.rank3, t.rank4, t.rank5)
+            WHERE cs.guid IN (${GUID_LIST})" 2>/dev/null || log_warn "Talent spell cleanup skipped (armory DB may not exist)"
+    fi
+
 else
     # ---- Full transfer: replace target DB ----
     log_info "Replacing ${TGT_CHAR_DB} with migrated data..."
