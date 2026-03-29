@@ -177,16 +177,16 @@ export default function MapPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
             {/* Map */}
             <div className="lg:col-span-3">
               <div
-                className="relative border border-[#2a2a32] rounded-xl overflow-hidden"
+                className="relative rounded-xl overflow-hidden bg-[#0a0a0c]"
                 style={{
                   backgroundImage: `url(${mapConfig.image})`,
-                  backgroundSize: "cover",
+                  backgroundSize: "100% 100%",
                   backgroundPosition: "center",
-                  aspectRatio: "4/3",
+                  aspectRatio: "1002/668",
                 }}
               >
 
