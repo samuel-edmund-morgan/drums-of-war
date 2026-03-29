@@ -104,12 +104,40 @@ if [ ! -f "${PROJECTS_DIR}/transfer/.env" ]; then
   ok "transfer/.env created"
 fi
 
-# ── 4. Create data directories for maps ──
-info "Creating data directories..."
-for exp in classic tbc wotlk; do
-  mkdir -p "${SCRIPT_DIR}/data/${exp}"
-done
-ok "data/classic/, data/tbc/, data/wotlk/ created"
+# ── 4. Download game data (maps/vmaps/mmaps/dbc) ──
+RELEASE_URL="https://github.com/samuel-edmund-morgan/drums-of-war/releases/download/v1.0-data"
+DATA_DIR="${SCRIPT_DIR}/data"
+
+download_data() {
+  local exp="$1" file="${2}" size="$3"
+  local target_dir="${DATA_DIR}/${exp}"
+  mkdir -p "$target_dir"
+
+  if [ -d "${target_dir}/maps" ] && [ -d "${target_dir}/dbc" ]; then
+    ok "${exp} data already exists"
+    return
+  fi
+
+  info "Downloading ${exp} game data (~${size})..."
+  if curl -L --progress-bar "${RELEASE_URL}/${file}" -o "${DATA_DIR}/${file}"; then
+    info "Extracting ${file}..."
+    tar xzf "${DATA_DIR}/${file}" -C "$target_dir"
+    rm -f "${DATA_DIR}/${file}"
+    ok "${exp} data ready"
+  else
+    error "Failed to download ${exp} data"
+    warn "You can download manually from: ${RELEASE_URL}/${file}"
+  fi
+}
+
+echo ""
+info "Downloading game data (maps/vmaps/mmaps/dbc)..."
+echo -e "${YELLOW}  This will download ~4.1 GB total. Skip with Ctrl+C if you have your own data.${NC}"
+echo ""
+
+download_data "classic" "classic-data.tar.gz" "854 MB"
+download_data "tbc" "tbc-data.tar.gz" "1.6 GB"
+download_data "wotlk" "wotlk-data.tar.gz" "1.6 GB"
 
 # ── 5. Summary ──
 echo ""
@@ -119,7 +147,6 @@ echo -e "${GREEN}═════════════════════
 echo ""
 echo "Next steps:"
 echo "  1. Edit .env — set SERVER_PUBLIC_IP, MW_DOMAIN, RESEND_API_KEY"
-echo "  2. Place game data (maps/vmaps/mmaps/dbc) in data/classic/, data/tbc/, data/wotlk/"
-echo "  3. Start servers: docker compose up -d  (in each stack directory)"
-echo "  4. Or use: ./update.sh --build-all  to build and start everything"
+echo "  2. Start servers: docker compose up -d  (in each stack directory)"
+echo "  3. Or use: ./update.sh --build-all  to build and start everything"
 echo ""
