@@ -28,52 +28,46 @@ const PATCH_CONFIG: Record<string, { label: string; badge: string }> = {
   wotlk: { label: "WotLK", badge: "bg-blue-800/80 text-blue-200" },
 };
 
-// Map image configs: coordinate conversion from AzerothCore/playermap
-// Image size: 966 x 732 px
-const IMG_W = 966;
-const IMG_H = 732;
-
+// Map image configs with WorldMapArea DBC coordinate bounds
 interface MapConfig {
   name: string;
   image: string;
-  // Conversion: game coords → pixel coords on the 966x732 image
-  // pixel_x = offsetX - Math.round(game_y * scale)
-  // pixel_y = offsetY - Math.round(game_x * scale)
-  scale: number;
-  offsetX: number;
-  offsetY: number;
+  // WorldMapArea DBC bounds for coordinate conversion:
+  // pixel_x% = (locLeft - game_y) / (locLeft - locRight) * 100
+  // pixel_y% = (locTop - game_x) / (locTop - locBottom) * 100
+  locLeft: number;
+  locRight: number;
+  locTop: number;
+  locBottom: number;
   maps: number[]; // which WoW map IDs belong here
 }
 
 const MAP_CONFIGS: MapConfig[] = [
   {
-    name: "Azeroth",
-    image: "/map-images/azeroth.jpg",
-    scale: 0.025140,
-    offsetX: 752, // for map 0 (Eastern Kingdoms)
-    offsetY: 291,
-    maps: [0, 1], // EK + Kalimdor on same image
+    name: "Eastern Kingdoms",
+    image: "/map-images/eastern_kingdoms.jpg",
+    locLeft: 18172.0, locRight: -22569.2, locTop: 11176.3, locBottom: -15973.3,
+    maps: [0],
+  },
+  {
+    name: "Kalimdor",
+    image: "/map-images/kalimdor.jpg",
+    locLeft: 17066.6, locRight: -19733.2, locTop: 12799.9, locBottom: -11733.3,
+    maps: [1],
   },
   {
     name: "Outland",
     image: "/map-images/outland.jpg",
-    scale: 0.051446,
-    offsetX: 858,
-    offsetY: 84,
+    locLeft: 12996.0, locRight: -4468.0, locTop: 5821.4, locBottom: -5821.4,
     maps: [530],
   },
   {
     name: "Northrend",
     image: "/map-images/northrend.jpg",
-    scale: 0.050085,
-    offsetX: 505,
-    offsetY: 642,
+    locLeft: 9217.2, locRight: -8534.2, locTop: 10593.4, locBottom: -1240.9,
     maps: [571],
   },
 ];
-
-// Special offsets for Kalimdor (map 1) on azeroth.jpg
-const KALIMDOR_OFFSET = { x: 194, y: 398 };
 
 interface Player {
   guid: number;
@@ -90,24 +84,11 @@ interface Player {
   patch: string;
 }
 
-function gameToPixel(gameX: number, gameY: number, mapId: number, config: MapConfig): { px: number; py: number } | null {
-  let offsetX = config.offsetX;
-  let offsetY = config.offsetY;
-
-  // Kalimdor has different offsets on the azeroth.jpg image
-  if (mapId === 1) {
-    offsetX = KALIMDOR_OFFSET.x;
-    offsetY = KALIMDOR_OFFSET.y;
-  }
-
-  const px = offsetX - Math.round(gameY * config.scale);
-  const py = offsetY - Math.round(gameX * config.scale);
-
-  // Convert to percentage for responsive rendering
-  return {
-    px: (px / IMG_W) * 100,
-    py: (py / IMG_H) * 100,
-  };
+function gameToPixel(gameX: number, gameY: number, _mapId: number, config: MapConfig): { px: number; py: number } | null {
+  // WorldMapArea DBC coordinate conversion
+  const px = ((config.locLeft - gameY) / (config.locLeft - config.locRight)) * 100;
+  const py = ((config.locTop - gameX) / (config.locTop - config.locBottom)) * 100;
+  return { px, py };
 }
 
 export default function MapPage() {
@@ -199,13 +180,7 @@ export default function MapPage() {
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             {/* Map */}
             <div className="lg:col-span-3">
-              <div
-                className="relative border border-[#2a2a32] rounded-xl overflow-hidden"
-                style={{
-                  backgroundColor: mapConfig.maps.includes(530) ? "#0a0a0c" : "#0a1929",
-                  backgroundImage: mapConfig.maps.includes(530) ? "none" : "radial-gradient(ellipse at center, #0d2847 0%, #071422 60%, #050e18 100%)",
-                }}
-              >
+              <div className="relative border border-[#2a2a32] rounded-xl overflow-hidden bg-[#1a1510]">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={mapConfig.image}
