@@ -391,6 +391,29 @@ fix_char_after_transfer() {
   fi
 
   # ============================================================
+  # 6a. SPELLBOOK TAB CLEANUP — remove spells that lost SkillLineAbility mapping
+  # ============================================================
+  # Between expansions, some spells are removed from SkillLineAbility.dbc.
+  # These spells appear in the "General" tab instead of their class tab.
+  # E.g., Curse of Shadow (17862,17937) exists in Classic SLA → Affliction,
+  # but is absent from TBC SLA → falls to General tab.
+  # Remove these spells to keep spellbook clean.
+  if [[ "$tgt" == "tbc" ]] && table_exists "$ctr" "$db" "character_spell"; then
+    # Spells present in Classic SkillLineAbility but absent in TBC SkillLineAbility (107 spells)
+    local sla_removed="2480,2577,2578,2579,2855,2970,6510,7918,7919,11743,12165,12288,12307,12679,12707,12708,12791,12792,12830,12831,12832,12833,12944,13535,14095,14275,14276,14277,15019,16183,16269,16823,16824,16825,16902,16903,16904,16905,16906,16925,16926,16932,16933,16950,16951,17079,17082,17325,17354,17359,17806,17807,17808,17862,17864,17931,17932,17937,18181,18310,18311,18312,18313,18393,18394,18745,18746,18751,18752,18774,18775,18823,18824,18825,18830,19234,19235,19289,19291,19292,19293,19389,19390,19491,19493,19494,19557,19558,19968,19980,19981,19982,19993,20497,20498,20499,22430,22434,22839,23163,23166,23167,23301,24386,24387,28270,30047"
+    local sla_count
+    sla_count=$(db_exec "$ctr" -N -e "
+      SELECT COUNT(*) FROM ${db}.character_spell
+      WHERE guid=${guid} AND spell IN (${sla_removed})" 2>/dev/null || echo "0")
+    if [[ "${sla_count:-0}" != "0" ]]; then
+      db_exec "$ctr" -e "
+        DELETE FROM ${db}.character_spell
+        WHERE guid=${guid} AND spell IN (${sla_removed})" || true
+      log_info "    Removed ${sla_count} Classic-only spells (no TBC SkillLineAbility → would show in General tab)"
+    fi
+  fi
+
+  # ============================================================
   # 6b. PROFESSION SPELL GUARANTEE — ensure rank spells exist
   # ============================================================
   # After spell validation, profession rank spells may have been removed
