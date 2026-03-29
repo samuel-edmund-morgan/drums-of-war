@@ -247,6 +247,9 @@ export default function AdminPage() {
         {/* Server Management */}
         <ServerManagement />
 
+        {/* Remote Console */}
+        <RemoteConsole />
+
         {/* Server Logs */}
         <LogViewer />
 
@@ -859,6 +862,99 @@ function NewsManager() {
               )}
             </tbody>
           </table>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function RemoteConsole() {
+  const [server, setServer] = useState("classic");
+  const [command, setCommand] = useState("");
+  const [history, setHistory] = useState<Array<{ cmd: string; output: string; server: string; error?: boolean }>>([]);
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!command.trim() || loading) return;
+
+    const cmd = command.trim();
+    setLoading(true);
+    setCommand("");
+
+    try {
+      const res = await fetch("/api/admin/command", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ server, command: cmd }),
+      });
+      const data = await res.json();
+
+      setHistory((prev) => [
+        { cmd, output: data.output || data.error || "No response", server: data.server || server, error: !res.ok },
+        ...prev.slice(0, 49),
+      ]);
+    } catch {
+      setHistory((prev) => [
+        { cmd, output: "Connection error", server, error: true },
+        ...prev.slice(0, 49),
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const inputClass = "w-full px-4 py-2.5 rounded-lg bg-[#0a0a0c] border border-[#2a2a32] text-[#e8e6e3] focus:border-[#ff6b00] focus:outline-none transition-colors font-mono text-sm";
+
+  return (
+    <section className="mb-10">
+      <h2 className="text-xl font-bold text-[#e8e6e3] mb-4">Remote Console</h2>
+      <div className="rounded-xl bg-[#141418] border border-[#2a2a32] overflow-hidden">
+        <form onSubmit={handleSubmit} className="p-4 border-b border-[#2a2a32] flex gap-3 items-end">
+          <div className="flex gap-1 bg-[#0a0a0c] rounded-lg p-1">
+            {(["classic", "tbc", "wotlk"] as const).map((srv) => (
+              <button key={srv} type="button" onClick={() => setServer(srv)}
+                className={`px-3 py-1.5 text-xs rounded-md font-semibold transition-all ${
+                  server === srv ? "bg-[#ff6b00]/20 border border-[#ff6b00] text-[#ffa500]" : "text-[#666] hover:text-[#9a9a9a]"
+                }`}>
+                {srv === "classic" ? "Classic" : srv === "tbc" ? "TBC" : "WotLK"}
+              </button>
+            ))}
+          </div>
+          <div className="flex-1">
+            <input
+              type="text"
+              value={command}
+              onChange={(e) => setCommand(e.target.value)}
+              className={inputClass}
+              placeholder=".server info"
+              disabled={loading}
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </div>
+          <button type="submit" disabled={loading || !command.trim()}
+            className="px-5 py-2.5 text-sm font-semibold rounded-lg bg-gradient-to-r from-[#ff6b00] to-[#ffa500] text-[#0a0a0c] disabled:opacity-50">
+            {loading ? "..." : "Execute"}
+          </button>
+        </form>
+
+        <div className="p-4 max-h-80 overflow-y-auto bg-[#0a0a0c] font-mono text-xs space-y-3">
+          {history.length === 0 ? (
+            <div className="text-[#444] text-center py-4">Type a command above (e.g. .server info, .lookup spell Fire)</div>
+          ) : (
+            history.map((entry, i) => (
+              <div key={i}>
+                <div className="text-[#ffa500]">
+                  <span className="text-[#666]">[{entry.server}]</span> &gt; {entry.cmd}
+                </div>
+                <pre className={`mt-1 whitespace-pre-wrap ${entry.error ? "text-[#cc3333]" : "text-[#9a9a9a]"}`}>
+                  {entry.output}
+                </pre>
+              </div>
+            ))
+          )}
         </div>
       </div>
     </section>
