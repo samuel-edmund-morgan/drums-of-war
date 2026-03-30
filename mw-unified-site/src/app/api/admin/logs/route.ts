@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireGM } from "@/lib/adminAuth";
 import fs from "fs/promises";
+import { exec } from "child_process";
+import { promisify } from "util";
+
+const execAsync = promisify(exec);
 
 // Log paths mapped into the container via docker-compose volume mounts
 const LOG_PATHS: Record<string, string[]> = {
@@ -16,7 +20,10 @@ const LOG_PATHS: Record<string, string[]> = {
     "/host-logs/wotlk/Server.log",
     "/host-logs/wotlk/worldserver.log",
   ],
-  website: ["/proc/1/fd/1"],
+};
+
+const DOCKER_CONTAINERS: Record<string, string> = {
+  website: "mw-unified-site",
 };
 
 async function readLogTail(
@@ -35,6 +42,18 @@ async function readLogTail(
   return ["(Log file not accessible)"];
 }
 
+async function readDockerLogs(container: string, lines: number): Promise<string[]> {
+  try {
+    const { stdout } = await execAsync(
+      `docker logs --tail ${lines} ${container} 2>&1`,
+      { timeout: 5000 },
+    );
+    return stdout.split("\n").filter((l) => l.trim().length > 0);
+  } catch {
+    return ["(Docker logs not accessible)"];
+  }
+}
+
 export async function GET(request: NextRequest) {
   const { error } = await requireGM(3);
   if (error) return error;
@@ -47,14 +66,18 @@ export async function GET(request: NextRequest) {
   );
 
   const paths = LOG_PATHS[server];
-  if (!paths) {
+  const dockerContainer = DOCKER_CONTAINERS[server];
+
+  if (!paths && !dockerContainer) {
     return NextResponse.json(
       { error: "Unknown server" },
       { status: 400 }
     );
   }
 
-  const logLines = await readLogTail(paths, lineCount);
+  const logLines = dockerContainer
+    ? await readDockerLogs(dockerContainer, lineCount)
+    : await readLogTail(paths!, lineCount);
 
   return NextResponse.json({
     server,
