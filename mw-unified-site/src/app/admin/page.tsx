@@ -247,6 +247,9 @@ export default function AdminPage() {
         {/* Server Management */}
         <ServerManagement />
 
+        {/* Config Management */}
+        <ConfigManager />
+
         {/* Remote Console */}
         <RemoteConsole />
 
@@ -863,6 +866,143 @@ function NewsManager() {
             </tbody>
           </table>
         </div>
+      </div>
+    </section>
+  );
+}
+
+const CONFIG_FILES: Record<string, string[]> = {
+  classic: ["mangosd.conf", "realmd.conf"],
+  tbc: ["mangosd.conf", "realmd.conf", "ahbot.conf"],
+  wotlk: ["worldserver.conf", "authserver.conf"],
+};
+
+function ConfigManager() {
+  const [uploadMsg, setUploadMsg] = useState<Record<string, string>>({});
+
+  const handleDownload = (server: string) => {
+    window.open(`/api/admin/config?server=${server}&action=download`, "_blank");
+  };
+
+  const handleUpload = async (server: string, filename: string) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".conf";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+
+      // Rename file to expected name
+      const renamedFile = new File([file], filename, { type: file.type });
+      const form = new FormData();
+      form.append("server", server);
+      form.append("file", renamedFile);
+
+      setUploadMsg({ ...uploadMsg, [`${server}-${filename}`]: "Uploading..." });
+
+      try {
+        const res = await fetch("/api/admin/config", {
+          method: "POST",
+          credentials: "include",
+          body: form,
+        });
+        const data = await res.json();
+        setUploadMsg(prev => ({
+          ...prev,
+          [`${server}-${filename}`]: res.ok ? data.message : data.error,
+        }));
+      } catch {
+        setUploadMsg(prev => ({ ...prev, [`${server}-${filename}`]: "Upload failed" }));
+      }
+    };
+    input.click();
+  };
+
+  const handleRestore = async (server: string, filename: string) => {
+    if (!confirm(`Restore ${filename} to defaults on ${server}?`)) return;
+    try {
+      const res = await fetch("/api/admin/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ server, action: "restore", filename }),
+      });
+      const data = await res.json();
+      setUploadMsg(prev => ({
+        ...prev,
+        [`${server}-${filename}`]: res.ok ? data.message : data.error,
+      }));
+    } catch {
+      setUploadMsg(prev => ({ ...prev, [`${server}-${filename}`]: "Restore failed" }));
+    }
+  };
+
+  const handleRestart = async (server: string) => {
+    if (!confirm(`Restart ${server} server with new config?`)) return;
+    try {
+      await fetch("/api/admin/server-action", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ server, action: "restart" }),
+      });
+      setUploadMsg(prev => ({ ...prev, [`${server}-restart`]: "Server restarting..." }));
+    } catch {
+      setUploadMsg(prev => ({ ...prev, [`${server}-restart`]: "Restart failed" }));
+    }
+  };
+
+  return (
+    <section className="mb-10">
+      <h2 className="text-xl font-bold text-[#e8e6e3] mb-4">Server Configuration</h2>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {Object.entries(CONFIG_FILES).map(([server, files]) => (
+          <div key={server} className="rounded-xl bg-[#141418] border border-[#2a2a32] p-5">
+            <h3 className="text-base font-bold mb-4" style={{
+              color: server === "classic" ? "#d4a017" : server === "tbc" ? "#1eff00" : "#0070dd"
+            }}>
+              {server === "classic" ? "Classic" : server === "tbc" ? "TBC" : "WotLK"}
+            </h3>
+
+            {/* Download archive */}
+            <button onClick={() => handleDownload(server)}
+              className="w-full mb-3 px-3 py-2 text-xs rounded-lg border border-[#2a2a32] text-[#9a9a9a] hover:text-white hover:border-[#444] transition-colors text-left">
+              Download config archive
+            </button>
+
+            {/* Upload buttons for each file */}
+            {files.map((file) => (
+              <div key={file} className="mb-1">
+                <div className="flex gap-2">
+                  <button onClick={() => handleUpload(server, file)}
+                    className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-[#2a2a32] text-[#9a9a9a] hover:text-white hover:border-[#444] transition-colors text-left truncate">
+                    Upload {file}
+                  </button>
+                  <button onClick={() => handleRestore(server, file)}
+                    className="px-2 py-1.5 text-[10px] rounded-lg border border-[#2a2a32] text-[#666] hover:text-[#ffa500] hover:border-[#444] transition-colors"
+                    title="Restore defaults">
+                    Reset
+                  </button>
+                </div>
+                {uploadMsg[`${server}-${file}`] && (
+                  <p className={`text-[10px] mt-0.5 ${uploadMsg[`${server}-${file}`].includes("success") || uploadMsg[`${server}-${file}`].includes("restored") ? "text-[#4ade80]" : "text-[#ffa500]"}`}>
+                    {uploadMsg[`${server}-${file}`]}
+                  </p>
+                )}
+              </div>
+            ))}
+
+            {/* Separator + Restart */}
+            <div className="border-t border-[#2a2a32] my-3" />
+            <button onClick={() => handleRestart(server)}
+              className="w-full px-3 py-2 text-xs rounded-lg bg-gradient-to-r from-[#ff6b00]/20 to-[#ffa500]/20 border border-[#ff6b00]/40 text-[#ffa500] hover:border-[#ff6b00] transition-colors">
+              Restart server with new config
+            </button>
+            {uploadMsg[`${server}-restart`] && (
+              <p className="text-[10px] mt-1 text-[#ffa500]">{uploadMsg[`${server}-restart`]}</p>
+            )}
+          </div>
+        ))}
       </div>
     </section>
   );
