@@ -16,8 +16,9 @@ FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
-# Docker CLI for admin server management
-RUN apk add --no-cache docker-cli docker-cli-compose
+# Docker CLI for admin server management + git for upstream tracking
+RUN apk add --no-cache docker-cli docker-cli-compose git && \
+    git config --global --add safe.directory '*'
 
 # Copy built output
 COPY --from=builder /app/.next/standalone ./
